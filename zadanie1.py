@@ -7,7 +7,7 @@ def formatFloat(value):
     return format(value, ".15f").rstrip("0").rstrip(".")
 
 def calculateNextVector(prevVector, Theta):
-    matrix = np.array([[math.cos(Theta), -math.sin(Theta)], [math.sin(Theta), math.cos(Theta)]], dtype=np.float32)
+    matrix = np.array([[math.cos(Theta), -math.sin(Theta)], [math.sin(Theta), math.cos(Theta)]], dtype=np.float64)
     return np.dot(matrix, prevVector)
 
 def calculateNextPoint(prevPoint, vector):
@@ -24,8 +24,8 @@ def calculateAllPoints(startVector, startPoint, n, Theta):
     return allPoints
 
 def calculateAllVectors(n):
-    Theta = np.float32(2 * math.pi / n)
-    w_0 = np.array([math.cos(Theta) - 1, math.sin(Theta)], dtype=np.float32)
+    Theta = np.float64(2 * math.pi / n)
+    w_0 = np.array([math.cos(Theta) - 1, math.sin(Theta)], dtype=np.float64)
     vectors = [w_0]
     currVector = w_0
     
@@ -172,12 +172,12 @@ def printAllPoints(points):
 
 def comparision(list1, list2):
     return [a > b for a, b in zip(list1, list2)]
-
+    
 def main():
-    N = 4
-    Theta = np.float32(2 * math.pi / N)
-    w_0 = np.array([math.cos(Theta) - 1, math.sin(Theta)], dtype=np.float32)
-    v_0 = [np.float32(1), np.float32(0)]
+    N = 10
+    Theta = np.float64(2 * math.pi / N)
+    w_0 = np.array([math.cos(Theta) - 1, math.sin(Theta)], dtype=np.float64)
+    v_0 = [np.float64(1), np.float64(0)]
     points = calculateAllPoints(w_0, v_0, N, Theta)
     print(f"N = {N}")
     print("Vector of sum v_i {i = 0, 1, ... , N-1}: ", [formatFloat(sum) for sum in sumOfVectors(N)])
@@ -197,55 +197,55 @@ def main():
     drawPlot3(n_values2)
     
     list1 = [
-        1.4466350785860396e-08,
-        1.1906871802445299e-09,
-        1.30790987914415e-07,
-        1.7687660833337145e-07,
-        1.4745821329212025e-07,
-        2.9140472005782736e-07,
-        1.4185476278794944e-07,
-        1.326778874324335e-07,
-        4.7335220769652673e-07,
-        1.1630138463159517e-07
+        5.776865447512006e-17,
+        2.178246710040794e-16,
+        2.7749593374671904e-16,
+        4.366389559043215e-16,
+        3.7521762514616853e-16,
+        7.170942648917674e-16,
+        5.802501942811156e-16,
+        1.4549659367009322e-16,
+        9.653602161551593e-16,
+        2.2852089674716046e-16
     ]
 
     list2 = [
-        1.4466350785860396e-08,
-        1.1906871802445299e-09,
-        1.30790987914415e-07,
-        1.7687660833337145e-07,
-        1.4745821329212025e-07,
-        2.9140472005782736e-07,
-        1.4185476278794944e-07,
-        1.326778874324335e-07,
-        4.7335220769652673e-07,
-        1.1630138463159517e-07
+        3.592757177872429e-17,
+        2.1291146251044555e-16,
+        2.7651540219112816e-16,
+        4.3036584552857323e-16,
+        4.302065385085116e-16,
+        7.10639753250698e-16,
+        5.667254573082696e-16,
+        1.802431047354073e-16,
+        9.569748928461308e-16,
+        2.499290855688125e-16
     ]
     
     list3 = [
-        1.4829757804731e-06,
-        6.959776744594806e-05,
-        0.00016736768683020862,
-        0.00010151344642331543,
-        7.664847283891317e-05,
-        6.213958898549771e-05,
-        5.1749688433279413e-05,
-        4.4241196085588534e-05,
-        3.9099402234658836e-05,
-        3.455657428779676e-05
+        2.9253904180694534e-15,
+        6.818348870251833e-14,
+        1.4423995840287497e-13,
+        2.553266298773119e-13,
+        2.1946977254424066e-13,
+        2.040375048142444e-13,
+        2.5427590289815345e-13,
+        1.2594022013679212e-13,
+        5.869653531626222e-13,
+        7.468362569979524e-13
     ]
     
     list4 = [
-        1.4829757804731e-06,
-        6.959776744594806e-05,
-        0.00016736768683020862,
-        0.00010151344642331543,
-        7.664847283891317e-05,
-        6.213958898549771e-05,
-        5.1749688433279413e-05,
-        4.4241196085588534e-05,
-        3.9099402234658836e-05,
-        3.455657428779676e-05
+        2.8987052887423823e-15,
+        6.821050235112466e-14,
+        1.442597208668806e-13,
+        2.553013282394499e-13,
+        2.194599121626314e-13,
+        2.0405026493393717e-13,
+        2.54271606456453e-13,
+        1.2595385231501354e-13,
+        5.869909129018201e-13,
+        7.468651323840133e-13
     ]
     
     print("Percentage of vector sums calculated using the separation method that are closer to zero (n = [10, 100]): ", comparision(list1, list2).count(True)/len(comparision(list1, list2)))
