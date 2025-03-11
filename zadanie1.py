@@ -118,12 +118,10 @@ def drawPlot2(n_values):
         total_norm = math.fsum(np.linalg.norm(v) for v in vectors)  # Suma norm wektorów
         vector_sum = sumOfVectors(val)
         error = np.linalg.norm(vector_sum) / total_norm  # Błąd względny
-        print(error)
         errors.append(error)
-    
-    print("--------------------------------------------------------------------------------")
 
-    plt.plot(n_values, errors, linestyle="--")
+    plt.figure(figsize=(12, 8))
+    plt.plot(n_values, errors, "o")
     plt.xlabel("Liczba kątów n")
     plt.ylabel("Norma wektora sumy |sum(wi)|")
     
@@ -132,24 +130,29 @@ def drawPlot2(n_values):
     ax.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
     ax.yaxis.get_offset_text().set_fontsize(12)  # Rozmiar tekstu wykładnika
     ax.yaxis.get_offset_text().set_position((0, 1.02))  # Przesunięcie wykładnika w górę
+    
 
     plt.grid(True, linestyle="--", linewidth=0.5)
     plt.show()
-    
+
+def calculateError(val, sumMethod):
+    vectors = calculateAllVectors(val)
+    total_norm = math.fsum(np.linalg.norm(v) for v in vectors)  # Suma norm wektorów
+    vector_sum = sumMethod(val)
+    error = np.linalg.norm(vector_sum) / total_norm  # Błąd względny
+
+    return error
+
 def drawPlot3(n_values):
-    errors = []
+    errorsDifferences = []
     
     for val in n_values:
-        vectors = calculateAllVectors(val)
-        total_norm = math.fsum(np.linalg.norm(v) for v in vectors)  # Suma norm wektorów
-        vector_sum = sumOfVectorsDifferent(val)
-        error = np.linalg.norm(vector_sum) / total_norm  # Błąd względny
-        print(error)
-        errors.append(error)
-    
-    print("--------------------------------------------------------------------------------")
+        errorStandard = calculateError(val, sumOfVectors)
+        errorDifferent = calculateError(val, sumOfVectorsDifferent)
+        errorsDifferences.append(abs(errorStandard - errorDifferent))
 
-    plt.plot(n_values, errors, linestyle="--")
+    plt.figure(figsize=(12, 8))
+    plt.plot(n_values, errorsDifferences, marker="o")
     plt.xlabel("Liczba kątów n")
     plt.ylabel("Norma wektora sumy |sum(wi)|")
     
@@ -173,6 +176,19 @@ def printAllPoints(points):
 def comparision(list1, list2):
     return [a > b for a, b in zip(list1, list2)]
     
+def calculateAccurancy(n_values):
+    errors_std = []
+    errors_dif = []
+    
+    for val in n_values:
+        errors_std.append(calculateError(val, sumOfVectors))
+        errors_dif.append(calculateError(val, sumOfVectorsDifferent))
+        
+    differences_of_errors = comparision(errors_std, errors_dif)
+    count_accurancy = differences_of_errors.count(True) / len(n_values)
+    
+    return count_accurancy
+
 def main():
     N = 10
     Theta = np.float64(2 * math.pi / N)
@@ -185,70 +201,18 @@ def main():
     printAllVectors(N)
     print("---------------- All points ----------------")
     printAllPoints(points)
-    drawPlot(points)
+    # drawPlot(points)
     
-    n_values = np.arange(10, 101, 10)
+    n_values = np.arange(10, 1001, 10)
     drawPlot2(n_values)
     
-    n_values2 = np.arange(1000, 100001, 10000)
+    n_values2 = np.arange(1000, 100001, 1000)
     drawPlot2(n_values2)
     
     drawPlot3(n_values)
     drawPlot3(n_values2)
     
-    list1 = [
-        5.776865447512006e-17,
-        2.178246710040794e-16,
-        2.7749593374671904e-16,
-        4.366389559043215e-16,
-        3.7521762514616853e-16,
-        7.170942648917674e-16,
-        5.802501942811156e-16,
-        1.4549659367009322e-16,
-        9.653602161551593e-16,
-        2.2852089674716046e-16
-    ]
-
-    list2 = [
-        3.592757177872429e-17,
-        2.1291146251044555e-16,
-        2.7651540219112816e-16,
-        4.3036584552857323e-16,
-        4.302065385085116e-16,
-        7.10639753250698e-16,
-        5.667254573082696e-16,
-        1.802431047354073e-16,
-        9.569748928461308e-16,
-        2.499290855688125e-16
-    ]
-    
-    list3 = [
-        2.9253904180694534e-15,
-        6.818348870251833e-14,
-        1.4423995840287497e-13,
-        2.553266298773119e-13,
-        2.1946977254424066e-13,
-        2.040375048142444e-13,
-        2.5427590289815345e-13,
-        1.2594022013679212e-13,
-        5.869653531626222e-13,
-        7.468362569979524e-13
-    ]
-    
-    list4 = [
-        2.8987052887423823e-15,
-        6.821050235112466e-14,
-        1.442597208668806e-13,
-        2.553013282394499e-13,
-        2.194599121626314e-13,
-        2.0405026493393717e-13,
-        2.54271606456453e-13,
-        1.2595385231501354e-13,
-        5.869909129018201e-13,
-        7.468651323840133e-13
-    ]
-    
-    print("Percentage of vector sums calculated using the separation method that are closer to zero (n = [10, 100]): ", comparision(list1, list2).count(True)/len(comparision(list1, list2)))
-    print("Percentage of vector sums calculated using the separation method that are closer to zero (n = [1000, 91000]): ", comparision(list3, list4).count(True)/len(comparision(list3, list4)))
+    print(calculateAccurancy(n_values))
+    print(calculateAccurancy(n_values2))
 
 main()
