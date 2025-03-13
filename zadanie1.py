@@ -1,14 +1,18 @@
 import numpy as np
-import math
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+
+cache = {}
 
 def formatFloat(value):
     return format(value, ".15f").rstrip("0").rstrip(".")
 
 def calculateNextVector(prevVector, Theta):
-    matrix = np.array([[math.cos(Theta), -math.sin(Theta)], [math.sin(Theta), math.cos(Theta)]], dtype=np.float64)
-    return np.dot(matrix, prevVector)
+    cosT, sinT = np.cos(Theta), np.sin(Theta)
+    return np.array([
+        prevVector[0] * cosT - prevVector[1] * sinT,
+        prevVector[0] * sinT + prevVector[1] * cosT
+    ], dtype=np.float64)
 
 def calculateNextPoint(prevPoint, vector):
     return np.add(prevPoint, vector)
@@ -24,49 +28,49 @@ def calculateAllPoints(startVector, startPoint, n, Theta):
     return allPoints
 
 def calculateAllVectors(n):
-    Theta = np.float64(2 * math.pi / n)
-    w_0 = np.array([math.cos(Theta) - 1, math.sin(Theta)], dtype=np.float64)
-    vectors = [w_0]
-    currVector = w_0
+    if n in cache:
+        return cache[n]
     
-    while len(vectors) < n:
-        nextVector = calculateNextVector(currVector, Theta)
-        vectors.append(nextVector)
-        currVector = nextVector
-        
+    Theta = np.float64(2 * np.pi / n)
+    rotation_matrix = np.array([[np.cos(Theta), -np.sin(Theta)], 
+                                [np.sin(Theta), np.cos(Theta)]], dtype=np.float64)
+    
+    vectors = np.zeros((n, 2), dtype=np.float64)
+    vectors[0] = np.array([np.cos(Theta) - 1, np.sin(Theta)], dtype=np.float64)
+
+    for i in range(1, n):
+        vectors[i] = rotation_matrix @ vectors[i - 1]
+
+    cache[n] = vectors
     return vectors
 
-def sumOfVectors(n):
-    vectors = calculateAllVectors(n)
-    x_sum = math.fsum(v[0] for v in vectors)
-    y_sum = math.fsum(v[1] for v in vectors)
-    
-    return (x_sum, y_sum)
+def sumOfVectors(vectors):
+    return np.sum(vectors, axis=0)
 
-def sumOfVectorsDifferent(n):
+def sumOfVectorsDifferent(vectors):
+    x_values, y_values = vectors[:, 0], vectors[:, 1]  # Ekstrakcja kolumn
+    
+    # Podział na wartości dodatnie i ujemne
+    x_pos, x_neg = x_values[x_values >= 0], x_values[x_values < 0]
+    y_pos, y_neg = y_values[y_values >= 0], y_values[y_values < 0]
+
+    # Sortowanie stabilne (bez konieczności odwracania kolejności)
+    x_pos_sorted = np.sort(x_pos, kind="stable")
+    x_neg_sorted = np.sort(x_neg, kind="stable")[::-1]  # Sortowanie malejące
+    y_pos_sorted = np.sort(y_pos, kind="stable")
+    y_neg_sorted = np.sort(y_neg, kind="stable")[::-1]  # Sortowanie malejące
+
+    # Sumowanie
+    x_sum = np.sum(x_pos_sorted) + np.sum(x_neg_sorted)
+    y_sum = np.sum(y_pos_sorted) + np.sum(y_neg_sorted)
+
+    return x_sum, y_sum
+
+def calculateError(n, sumMethod):
     vectors = calculateAllVectors(n)
-    vectors_x_pos, vectors_x_neg, vectors_y_pos, vectors_y_neg = [], [], [], []
-    
-    for vector in vectors:
-        if vector[0] < 0.0:
-            vectors_x_neg.append(vector[0])
-        else:
-            vectors_x_pos.append(vector[0])
-        
-        if vector[1] < 0.0:
-            vectors_y_neg.append(vector[1])
-        else:
-            vectors_y_pos.append(vector[1])
-    
-    vectors_x_neg.sort(reverse=True)
-    vectors_x_pos.sort()
-    vectors_y_neg.sort(reverse=True)
-    vectors_y_pos.sort()
-    
-    x_sum = math.fsum(vectors_x_pos) + math.fsum(vectors_x_neg)
-    y_sum = math.fsum(vectors_y_pos) + math.fsum(vectors_y_neg)
-    
-    return (x_sum, y_sum)
+    vector_norms = np.linalg.norm(vectors, axis=1).sum()
+    vector_sum = np.linalg.norm(sumMethod(vectors))
+    return vector_sum / vector_norms
 
 def drawPlot(points, offset=0.1, margin=0.5):
     # Rozdzielenie współrzędnych wszystkich punktów
@@ -110,57 +114,28 @@ def drawPlot(points, offset=0.1, margin=0.5):
     plt.legend()
     plt.show()
     
-def drawPlot2(n_values):
-    errors = []
-    
-    for val in n_values:
-        vectors = calculateAllVectors(val)
-        total_norm = math.fsum(np.linalg.norm(v) for v in vectors)  # Suma norm wektorów
-        vector_sum = sumOfVectors(val)
-        error = np.linalg.norm(vector_sum) / total_norm  # Błąd względny
-        errors.append(error)
-
-    plt.figure(figsize=(12, 8))
+def drawPlot2(n_values, errors):
+    plt.figure(figsize=(18, 8))
     plt.plot(n_values, errors, "o")
     plt.xlabel("Liczba kątów n")
     plt.ylabel("Norma wektora sumy |sum(wi)|")
     
-    # **Formatowanie osi Y do postaci a × 10^b**
-    ax = plt.gca()  # Pobiera aktualną oś
-    ax.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
-    ax.yaxis.get_offset_text().set_fontsize(12)  # Rozmiar tekstu wykładnika
-    ax.yaxis.get_offset_text().set_position((0, 1.02))  # Przesunięcie wykładnika w górę
-    
+    ax = plt.gca()
+    ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.18f"))
 
     plt.grid(True, linestyle="--", linewidth=0.5)
     plt.show()
 
-def calculateError(val, sumMethod):
-    vectors = calculateAllVectors(val)
-    total_norm = math.fsum(np.linalg.norm(v) for v in vectors)  # Suma norm wektorów
-    vector_sum = sumMethod(val)
-    error = np.linalg.norm(vector_sum) / total_norm  # Błąd względny
+def drawPlot3(n_values, errors_std, errors_dif):
+    errors_differences = np.abs(errors_std - errors_dif)
 
-    return error
-
-def drawPlot3(n_values):
-    errorsDifferences = []
-    
-    for val in n_values:
-        errorStandard = calculateError(val, sumOfVectors)
-        errorDifferent = calculateError(val, sumOfVectorsDifferent)
-        errorsDifferences.append(abs(errorStandard - errorDifferent))
-
-    plt.figure(figsize=(12, 8))
-    plt.plot(n_values, errorsDifferences, marker="o")
+    plt.figure(figsize=(16, 8))
+    plt.plot(n_values, errors_differences, marker="o")
     plt.xlabel("Liczba kątów n")
     plt.ylabel("Norma wektora sumy |sum(wi)|")
     
-    # **Formatowanie osi Y do postaci a × 10^b**
-    ax = plt.gca()  # Pobiera aktualną oś
-    ax.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
-    ax.yaxis.get_offset_text().set_fontsize(12)  # Rozmiar tekstu wykładnika
-    ax.yaxis.get_offset_text().set_position((0, 1.02))  # Przesunięcie wykładnika w górę
+    ax = plt.gca()
+    ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.16f"))
 
     plt.grid(True, linestyle="--", linewidth=0.5)
     plt.show()
@@ -172,31 +147,19 @@ def printAllVectors(n):
 def printAllPoints(points):
     for i, (point_x, point_y) in enumerate(points):
         print(f"v_{i}. ", [formatFloat(point_x), formatFloat(point_y)])
-
-def comparision(list1, list2):
-    return [a > b for a, b in zip(list1, list2)]
     
-def calculateAccurancy(n_values):
-    errors_std = []
-    errors_dif = []
-    
-    for val in n_values:
-        errors_std.append(calculateError(val, sumOfVectors))
-        errors_dif.append(calculateError(val, sumOfVectorsDifferent))
-        
-    differences_of_errors = comparision(errors_std, errors_dif)
-    count_accurancy = differences_of_errors.count(True) / len(n_values)
-    
-    return count_accurancy
+def calculateAccurancy(errors_std, errors_dif):
+    return np.mean(errors_std > errors_dif)
 
 def main():
     N = 10
-    Theta = np.float64(2 * math.pi / N)
-    w_0 = np.array([math.cos(Theta) - 1, math.sin(Theta)], dtype=np.float64)
+    Theta = np.float64(2 * np.pi / N)
+    w_0 = np.array([np.cos(Theta) - 1, np.sin(Theta)], dtype=np.float64)
     v_0 = [np.float64(1), np.float64(0)]
     points = calculateAllPoints(w_0, v_0, N, Theta)
+    vectors = calculateAllVectors(N)
     print(f"N = {N}")
-    print("Vector of sum v_i {i = 0, 1, ... , N-1}: ", [formatFloat(sum) for sum in sumOfVectors(N)])
+    print("Vector of sum v_i {i = 0, 1, ... , N-1}: ", [formatFloat(sum) for sum in sumOfVectors(vectors)])
     print("---------------- All vectors ----------------")
     printAllVectors(N)
     print("---------------- All points ----------------")
@@ -204,15 +167,19 @@ def main():
     # drawPlot(points)
     
     n_values = np.arange(10, 1001, 10)
-    drawPlot2(n_values)
-    
     n_values2 = np.arange(1000, 100001, 1000)
-    drawPlot2(n_values2)
+    errors_std = np.array([calculateError(n, sumOfVectors) for n in n_values])
+    errors_dif = np.array([calculateError(n, sumOfVectorsDifferent) for n in n_values])
+    errors_std2 = np.array([calculateError(n, sumOfVectors) for n in n_values2])
+    errors_dif2 = np.array([calculateError(n, sumOfVectorsDifferent) for n in n_values2])
     
-    drawPlot3(n_values)
-    drawPlot3(n_values2)
+    drawPlot2(n_values, errors_std)
+    drawPlot2(n_values2, errors_std2)
     
-    print(calculateAccurancy(n_values))
-    print(calculateAccurancy(n_values2))
+    drawPlot3(n_values, errors_std, errors_dif)
+    drawPlot3(n_values2, errors_std2, errors_dif2)
+    
+    print(calculateAccurancy(errors_std, errors_dif))
+    print(calculateAccurancy(errors_std2, errors_dif2))
 
 main()
