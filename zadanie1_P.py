@@ -1,147 +1,121 @@
-from math import cos, sin, sqrt, pi
-import matplotlib.pyplot as plt
-from heapq import heappop, heappush, heapify
-import time
+import heapq
+import numpy as np
 
-# H2
-def suma_wektorow(n):
-    theta = 2 * pi / n
-    w0 = [cos(theta) - 1, sin(theta)]
-    macierz_obrotu_wektora = [[cos(theta), -sin(theta)], [sin(theta), cos(theta)]]
-    suma = w0
-    poprzedni_wektor = w0
-    for _ in range(1, n):
-        nastepny_wektor = [macierz_obrotu_wektora[0][0]*poprzedni_wektor[0] + macierz_obrotu_wektora[0][1]*poprzedni_wektor[1],
-                  macierz_obrotu_wektora[1][0]*poprzedni_wektor[0] + macierz_obrotu_wektora[1][1]*poprzedni_wektor[1]]
-        suma = [suma[0] + nastepny_wektor[0], suma[1] + nastepny_wektor[1]]
-        poprzedni_wektor = nastepny_wektor
-    return suma
+cache = {}
 
-# H3
-def sumy_wspolrzednych_wektorow(n):
-    start_time = time.time()
-
-    theta = 2 * pi / n
-    w0 = [cos(theta) - 1, sin(theta)]
-    macierz_obrotu_wektora = [[cos(theta), -sin(theta)], [sin(theta), cos(theta)]]
+def calculateAllVectors(n):
+    if n in cache:
+        return cache[n]
     
-    x_plus, x_minus, y_plus, y_minus = [], [], [], []
-    poprzedni_wektor = w0
-
-    for _ in range(1, n):
-        nastepny_wektor = [macierz_obrotu_wektora[0][0]*poprzedni_wektor[0] + macierz_obrotu_wektora[0][1]*poprzedni_wektor[1],
-                  macierz_obrotu_wektora[1][0]*poprzedni_wektor[0] + macierz_obrotu_wektora[1][1]*poprzedni_wektor[1]]
-        if nastepny_wektor[0] >= 0:
-            x_plus.append(nastepny_wektor[0])
-        else:
-            x_minus.append(nastepny_wektor[0])
-        if nastepny_wektor[1] >= 0:
-            y_plus.append(nastepny_wektor[1])
-        else:
-            y_minus.append(nastepny_wektor[1])
-        poprzedni_wektor = nastepny_wektor
+    Theta = np.float64(2 * np.pi / n)
+    rotation_matrix = np.array([[np.cos(Theta), -np.sin(Theta)], 
+                                [np.sin(Theta), np.cos(Theta)]], dtype=np.float64)
     
-    suma_x_plus = sum(sorted(x_plus))
-    suma_x_minus = sum(sorted(x_minus, reverse=True))
+    vectors = np.zeros((n, 2), dtype=np.float64)
+    vectors[0] = np.array([np.cos(Theta) - 1, np.sin(Theta)], dtype=np.float64)
 
-    suma_y_plus = sum(sorted(y_plus))
-    suma_y_minus = sum(sorted(y_minus, reverse=True))
+    for i in range(1, n):
+        vectors[i] = rotation_matrix @ vectors[i - 1]
 
-    suma_x = suma_x_plus + suma_x_minus
-    suma_y = suma_y_plus + suma_y_minus
+    cache[n] = vectors
+    return vectors
 
-    end_time = time.time()
-    execution_time = end_time - start_time
+def sumOfVectorsDifferent(vectors):
+    x_values, y_values = vectors[:, 0], vectors[:, 1]  # Ekstrakcja kolumn
     
-    # print(f"Czas wykonania dla n={n}: {execution_time:.6f} sekundy")
+    # Podział na wartości dodatnie i ujemne
+    x_pos, x_neg = x_values[x_values >= 0], x_values[x_values < 0]
+    y_pos, y_neg = y_values[y_values >= 0], y_values[y_values < 0]
 
-    # print(f"Wynik: ({suma_x:.20f}, {suma_y:.20f})")
-    return suma_x, suma_y, execution_time
+    # Sortowanie stabilne (bez konieczności odwracania kolejności)
+    x_pos_sorted = np.sort(x_pos, kind="stable")
+    x_neg_sorted = np.sort(x_neg, kind="stable")[::-1]  # Sortowanie malejące
+    y_pos_sorted = np.sort(y_pos, kind="stable")
+    y_neg_sorted = np.sort(y_neg, kind="stable")[::-1]  # Sortowanie malejące
 
-# H4
-def reduce_heap(heap, reverse=False):
+    # Sumowanie
+    x_sum = np.sum(x_pos_sorted) + np.sum(x_neg_sorted)
+    y_sum = np.sum(y_pos_sorted) + np.sum(y_neg_sorted)
+
+    return x_sum, y_sum
+
+def heap_sum(values, reverse=False):
+
+    if len(values) == 0:
+        return 0
+    
+    heap = list(values)
     if reverse:
-        heap = [-x for x in heap]  # Odwracamy znaki, by działać na max-heap
-        heapify(heap)
+        heap = [-x for x in heap]  # Odwrócenie znaków, aby symulować kopiec max
+    heapq.heapify(heap)  # Tworzenie kopca min
     
     while len(heap) > 1:
-        a = heappop(heap)
-        b = heappop(heap)
-        heappush(heap, a + b)
+        a = heapq.heappop(heap)
+        b = heapq.heappop(heap)
+        heapq.heappush(heap, a + b)  # Wstawiamy sumę z powrotem
     
-    return -heap[0] if reverse else heap[0]
+    return -heap[0] if reverse else heap[0]  # Odwracamy znak jeśli to kopiec max
 
-def sumy_wspolrzednych_wektorow_heap(n):
-    start_time = time.time()
+def sumOfVectorsHeap(vectors):
+    x_values, y_values = vectors[:, 0], vectors[:, 1]
 
-    theta = 2 * pi / n
-    w0 = [cos(theta) - 1, sin(theta)]
-    macierz_obrotu_wektora = [[cos(theta), -sin(theta)], [sin(theta), cos(theta)]]
+    # Podział na wartości dodatnie i ujemne
+    x_pos, x_neg = x_values[x_values >= 0], x_values[x_values < 0]
+    y_pos, y_neg = y_values[y_values >= 0], y_values[y_values < 0]
+
+    # Sumowanie przy użyciu kopców
+    x_sum = heap_sum(x_pos) + heap_sum(x_neg, reverse=True)
+    y_sum = heap_sum(y_pos) + heap_sum(y_neg, reverse=True)
+
+    return x_sum, y_sum
+
+
+import time
+import matplotlib.pyplot as plt
+
+ns = list(range(10, 1000001, 10000))
+# ns = list(range(10, 10000, 1000))
+diff_times = []
+heap_times = []
+
+diff_results = []
+heap_results = []
+
+for n in ns:
+    vectors = calculateAllVectors(n)
     
-    x_plus, x_minus, y_plus, y_minus = [], [], [], []
-    poprzedni_wektor = w0
+    start = time.time()
+    diff_result = sumOfVectorsDifferent(vectors)
+    diff_times.append(time.time() - start)
+    diff_results.append(diff_result)
     
-    for _ in range(1, n):
-        nastepny_wektor = [
-            macierz_obrotu_wektora[0][0] * poprzedni_wektor[0] + macierz_obrotu_wektora[0][1] * poprzedni_wektor[1],
-            macierz_obrotu_wektora[1][0] * poprzedni_wektor[0] + macierz_obrotu_wektora[1][1] * poprzedni_wektor[1]
-        ]
-        
-        if nastepny_wektor[0] >= 0:
-            x_plus.append(nastepny_wektor[0])
-        else:
-            x_minus.append(nastepny_wektor[0])
-        
-        if nastepny_wektor[1] >= 0:
-            y_plus.append(nastepny_wektor[1])
-        else:
-            y_minus.append(nastepny_wektor[1])
-        
-        poprzedni_wektor = nastepny_wektor
-    
-    # Redukcja z użyciem kopca
-    suma_x_plus = reduce_heap(x_plus) if x_plus else 0
-    suma_x_minus = reduce_heap(x_minus, reverse=True) if x_minus else 0
-    suma_y_plus = reduce_heap(y_plus) if y_plus else 0
-    suma_y_minus = reduce_heap(y_minus, reverse=True) if y_minus else 0
-    
-    suma_x = suma_x_plus + suma_x_minus
-    suma_y = suma_y_plus + suma_y_minus
+    start = time.time()
+    heap_result = sumOfVectorsHeap(vectors)
+    heap_times.append(time.time() - start)
+    heap_results.append(heap_result)
 
-    end_time = time.time()
-    execution_time = end_time - start_time
-    
-    # print(f"Czas wykonania dla n={n}: {execution_time:.6f} sekundy")
-    
-    return suma_x, suma_y, execution_time
+print(diff_results)
+print(heap_results)
 
-# print(sumy_wspolrzednych_wektorow(10))
-# print(sumy_wspolrzednych_wektorow_heap(10))
+# Wykres czasu działania
+plt.figure(figsize=(10, 5))
+plt.plot(ns, diff_times, label='Sortowanie')
+plt.plot(ns, heap_times, label='Kopiec')
+plt.xlabel('n')
+plt.ylabel('Czas (s)')
+plt.legend()
+plt.title('Porównanie czasu działania')
+plt.show()
 
-def porownaj_metody(n_values):
-    print("n | Δx | Δy | Δt (sekundy)")
-    print("-" * 40)
-    for n in n_values:
-        x1, y1, t1 = sumy_wspolrzednych_wektorow(n)
-        x2, y2, t2 = sumy_wspolrzednych_wektorow_heap(n)
-        delta_x = abs(x1 - x2)
-        delta_y = abs(y1 - y2)
-        delta_t = abs(t1 - t2)
-        print(f"{n} | {delta_x:.20f} | {delta_y:.20f} | {delta_t:.10f}")
+# Wykres różnic wyników
+x_diffs = [abs(d[0] - h[0]) for d, h in zip(diff_results, heap_results)]
+y_diffs = [abs(d[1] - h[1]) for d, h in zip(diff_results, heap_results)]
 
-n_values = [4, 10, 100, 500, 1000, 5000, 10000, 100000, 1000000]
-porownaj_metody(n_values)
-
-# wynik wychodzi taki
-# 4 | 0.00000000000000000000 | 0.00000000000000000000 | 0.0000000000
-# 10 | 0.00000000000000022204 | 0.00000000000000022204 | 0.0000000000
-# 100 | 0.00000000000000111022 | 0.00000000000000022204 | 0.0000000000
-# 500 | 0.00000000000000177636 | 0.00000000000000044409 | 0.0010049343
-# 1000 | 0.00000000000000022204 | 0.00000000000000044409 | 0.0010008812
-# 5000 | 0.00000000000000066613 | 0.00000000000000333067 | 0.0029997826
-# 10000 | 0.00000000000000865974 | 0.00000000000000044409 | 0.0054781437
-# 100000 | 0.00000000000001243450 | 0.00000000000001065814 | 0.0949854851
-# 1000000 | 0.00000000000000288658 | 0.00000000000001243450 | 1.5011379719
-
-# i patrząc na to że robie takie działanie x1-x2 to wychodzi że wynik po prawej jest zawsze mniejszy.
-# Wniosek jest taki że algorytm z kopcem daje dokładniejszy wynik ale wraz ze zwiekszeniem wartości n działa on dłużej
+plt.figure(figsize=(10, 5))
+plt.plot(ns, x_diffs, label='Różnica w X')
+plt.plot(ns, y_diffs, label='Różnica w Y')
+plt.xlabel('n')
+plt.ylabel('Różnica wartości')
+plt.legend()
+plt.title('Różnice między wynikami algorytmów')
+plt.show()
