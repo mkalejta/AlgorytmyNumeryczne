@@ -81,6 +81,9 @@ heap_times = []
 diff_results = []
 heap_results = []
 
+diff_errors =[]
+heap_errors = []
+
 for n in ns:
     vectors = calculateAllVectors(n)
     
@@ -93,6 +96,7 @@ for n in ns:
     heap_result = sumOfVectorsHeap(vectors)
     heap_times.append(time.time() - start)
     heap_results.append(heap_result)
+    heap_errors.append(calculateError(n, sumOfVectorsHeap))
 
 print(diff_results)
 print(heap_results)
