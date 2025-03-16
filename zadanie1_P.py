@@ -1,5 +1,9 @@
 import heapq
 import numpy as np
+import matplotlib.ticker as ticker
+import time
+import matplotlib.pyplot as plt
+
 
 cache = {}
 
@@ -19,6 +23,12 @@ def calculateAllVectors(n):
 
     cache[n] = vectors
     return vectors
+
+def calculateError(n, sumMethod):
+    vectors = calculateAllVectors(n)
+    vector_norms = np.linalg.norm(vectors, axis=1).sum()
+    vector_sum = np.linalg.norm(sumMethod(vectors))
+    return vector_sum / vector_norms
 
 def sumOfVectorsDifferent(vectors):
     x_values, y_values = vectors[:, 0], vectors[:, 1]  # Ekstrakcja kolumn
@@ -69,12 +79,23 @@ def sumOfVectorsHeap(vectors):
 
     return x_sum, y_sum
 
+def compare_methods_percentage(errors1, errors2):
+    count_method1_better = sum(e1 < e2 for e1, e2 in zip(errors1, errors2))
+    count_method2_better = sum(e1 > e2 for e1, e2 in zip(errors1, errors2))
+    count_equal = sum(e1 == e2 for e1, e2 in zip(errors1, errors2))
+    
+    total_cases = len(errors1)
+    
+    percentage_method1 = (count_method1_better / total_cases) * 100
+    percentage_method2 = (count_method2_better / total_cases) * 100
+    percentage_equal = (count_equal / total_cases) * 100
+    
+    print(f"Metoda H3 była lepsza w {count_method1_better} przypadkach ({percentage_method1:.2f}% całości).")
+    print(f"Metoda H4(kopiec) była lepsza w {count_method2_better} przypadkach ({percentage_method2:.2f}% całości).")
+    print(f"Równość wystąpiła w {count_equal} przypadkach ({percentage_equal:.2f}% całości).")
 
-import time
-import matplotlib.pyplot as plt
-
-ns = list(range(10, 1000001, 10000))
-# ns = list(range(10, 10000, 1000))
+# ns = list(range(10, 1001, 10))
+ns = list(range(1000, 200000, 200))
 diff_times = []
 heap_times = []
 
@@ -91,6 +112,7 @@ for n in ns:
     diff_result = sumOfVectorsDifferent(vectors)
     diff_times.append(time.time() - start)
     diff_results.append(diff_result)
+    diff_errors.append(calculateError(n, sumOfVectorsDifferent))
     
     start = time.time()
     heap_result = sumOfVectorsHeap(vectors)
@@ -98,11 +120,13 @@ for n in ns:
     heap_results.append(heap_result)
     heap_errors.append(calculateError(n, sumOfVectorsHeap))
 
-print(diff_results)
-print(heap_results)
+# print(diff_results)
+# print(heap_results)
+
+error_difference = np.abs(np.array(diff_errors) - np.array(heap_errors))
 
 # Wykres czasu działania
-plt.figure(figsize=(10, 5))
+plt.figure(figsize=(18, 8))
 plt.plot(ns, diff_times, label='Sortowanie')
 plt.plot(ns, heap_times, label='Kopiec')
 plt.xlabel('n')
@@ -111,15 +135,17 @@ plt.legend()
 plt.title('Porównanie czasu działania')
 plt.show()
 
-# Wykres różnic wyników
-x_diffs = [abs(d[0] - h[0]) for d, h in zip(diff_results, heap_results)]
-y_diffs = [abs(d[1] - h[1]) for d, h in zip(diff_results, heap_results)]
-
-plt.figure(figsize=(10, 5))
-plt.plot(ns, x_diffs, label='Różnica w X')
-plt.plot(ns, y_diffs, label='Różnica w Y')
+# Wykres błędów
+plt.figure(figsize=(18, 8))
+plt.plot(ns, error_difference, label='Różnica błędów (Sortowanie - Kopiec)', marker="o")
 plt.xlabel('n')
-plt.ylabel('Różnica wartości')
+plt.ylabel('Różnica błędów')
+
+ax = plt.gca()
+ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.16f"))
+
 plt.legend()
-plt.title('Różnice między wynikami algorytmów')
+plt.title('Porównanie różnicy błędów (Sortowanie vs Kopiec)')
 plt.show()
+
+compare_methods_percentage(diff_errors, heap_errors)
