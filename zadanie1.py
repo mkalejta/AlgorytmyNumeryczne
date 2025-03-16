@@ -121,7 +121,7 @@ def drawPlot2(n_values, errors):
     plt.ylabel("Norma wektora sumy |sum(wi)|")
     
     ax = plt.gca()
-    ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.18f"))
+    ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.15f"))
 
     plt.grid(True, linestyle="--", linewidth=0.5)
     plt.show()
@@ -129,7 +129,7 @@ def drawPlot2(n_values, errors):
 def drawPlot3(n_values, errors_std, errors_dif):
     errors_differences = np.abs(errors_std - errors_dif)
 
-    plt.figure(figsize=(16, 8))
+    plt.figure(figsize=(18, 8))
     plt.plot(n_values, errors_differences, marker="o")
     plt.xlabel("Liczba kątów n")
     plt.ylabel("Norma wektora sumy |sum(wi)|")
@@ -167,7 +167,7 @@ def main():
     # drawPlot(points)
     
     n_values = np.arange(10, 1001, 10)
-    n_values2 = np.arange(1000, 100001, 1000)
+    n_values2 = np.arange(1000, 200001, 200)
     errors_std = np.array([calculateError(n, sumOfVectors) for n in n_values])
     errors_dif = np.array([calculateError(n, sumOfVectorsDifferent) for n in n_values])
     errors_std2 = np.array([calculateError(n, sumOfVectors) for n in n_values2])
