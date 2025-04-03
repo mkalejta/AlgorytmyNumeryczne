@@ -1,8 +1,8 @@
 import numpy as np
+import scipy.sparse as sp
+import scipy.sparse.linalg as spla
+import matplotlib.pyplot as plt
 
-
-# ZADANIE 1: Proszę zaimplementować metodę eliminacji Gaussa z częściowym wyborem elementu
-# podstawowego (obowiązkowe).
 def gauss_elimination_partial_pivoting(A, b):
     """
     Rozwiązuje układ równań Ax = b metodą eliminacji Gaussa z częściowym wyborem elementu podstawowego.
@@ -10,86 +10,113 @@ def gauss_elimination_partial_pivoting(A, b):
     n = len(A)
     A = A.astype(float)  # Konwersja na float dla uniknięcia błędów numerycznych
     b = b.astype(float)
-    
-    # Eliminacja Gaussa z częściowym wyborem elementu podstawowego
+
     for k in range(n):
-        # Znajdź wiersz z maksymalnym elementem w kolumnie k i zamień go z wierszem k
         max_row = np.argmax(abs(A[k:, k])) + k
         A[[k, max_row]] = A[[max_row, k]]
         b[[k, max_row]] = b[[max_row, k]]
         
-        # Eliminacja
         for i in range(k + 1, n):
             factor = A[i, k] / A[k, k]
             A[i, k:] -= factor * A[k, k:]
             b[i] -= factor * b[k]
     
-    # Podstawianie wsteczne
     x = np.zeros(n)
     for i in range(n - 1, -1, -1):
         x[i] = (b[i] - np.dot(A[i, i+1:], x[i+1:])) / A[i, i]
-    
+
     return x
 
-# Przykładowe dane testowe
-A = np.array([[2, -1, 1], [1, 3, 2], [1, -1, 2]], dtype=float)
-b = np.array([8, 13, 7], dtype=float)
 
-solution = gauss_elimination_partial_pivoting(A, b)
-print("Rozwiązanie układu równań:", solution)
-
-
-# ZADANIE 2: Proszę zbudować układ równań liniowych w zależności od zadanego parametru N
-# opisujący funkcję φ(x, z, t) zgodnie z opisem powyżej i go rozwiązać (obowiązkowe).
-def build_and_solve_wave_system(N, L, H, h, T, g=9.81):
+def test_gauss_elimination():
     """
-    Buduje i rozwiązuje układ równań dla funkcji φ(x, z, t) zgodnie z teorią falowania.
-    N - liczba punktów siatki
-    L - długość fali
-    H - wysokość fali
-    h - głębokość wody
-    T - okres fali
-    g - przyspieszenie ziemskie
+    Tworzy przykładowy układ równań Ax = b, wypisuje go w czytelnej formie
+    i rozwiązuje metodą eliminacji Gaussa.
     """
+    A = np.array([
+        [2, -1,  1,  3],
+        [1,  3,  2, -2],
+        [3,  1, -3,  1],
+        [2, -2,  4, -1]
+    ], dtype=float)
+
+    b = np.array([5, 3, -1, 4], dtype=float)
+
+    print("\nPrzykładowy układ równań do rozwiązania:")
+    for i in range(len(A)):
+        row = " + ".join(f"{A[i, j]:.1f} * x{j+1}" for j in range(len(A[i])))
+        print(f"{row} = {b[i]:.1f}")
+
+    x = gauss_elimination_partial_pivoting(A, b)
+
+    print("\nRozwiązanie układu równań:")
+    for i, val in enumerate(x):
+        print(f"x{i+1} = {val:.4f}")
+
+
+def build_and_solve_wave_system(N, L, H, h, T):
+    """
+    Tworzy i rozwiązuje układ równań dla funkcji phi(z) na podstawie wzoru (7).
+    
+    Parametry:
+    N  - liczba podziałów w pionie
+    L  - długość fali
+    H  - wysokość fali
+    h  - głębokość zbiornika
+    T  - okres fali
+    
+    Zwraca:
+    z_vals - wartości z na siatce
+    phi_solution - rozwiązanie phi(z)
+    """
+    g = 9.81  # Przyspieszenie ziemskie
     k = 2 * np.pi / L  # Liczba falowa
     omega = 2 * np.pi / T  # Częstotliwość kołowa
-    
+
+    dz = h / (N - 1)
+    z_vals = np.linspace(-h, 0, N)  # Zakres od dna (-h) do powierzchni (0)
+
+    # Tworzenie macierzy rzadkiej (tylko elementy niezerowe)
     A = np.zeros((N, N))
     b = np.zeros(N)
-    
-    dz = h / (N - 1)  # Dzielimy głębokość na N-1 odcinków
-    
-    for i in range(1, N-1):
-        A[i, i-1] = 1 / dz**2
+
+    for i in range(1, N - 1):
+        A[i, i - 1] = 1 / dz**2
         A[i, i] = -2 / dz**2
-        A[i, i+1] = 1 / dz**2
+        A[i, i + 1] = 1 / dz**2
+
+    # Warunki brzegowe:
+    A[0, 0] = 1
+    b[0] = 0  # Warunek przy dnie: ∂φ/∂z = 0
     
-    # Warunek brzegowy przy dnie (z = -h): dφ/dz = 0
-    A[0, 0] = -1 / dz
-    A[0, 1] = 1 / dz
-    
-    # Warunek brzegowy na powierzchni (z = 0): d²φ/dt² + g dφ/dz = 0
-    A[-1, -2] = 1 / dz
-    A[-1, -1] = -1 / dz - omega**2 / g
-    
-    # Rozwiązanie analityczne jako warunek brzegowy
-    z_vals = np.linspace(-h, 0, N)
-    phi_analytical = (g * H / (2 * omega)) * (np.cosh(k * (z_vals + h)) / np.cosh(k * h))
-    b[-1] = phi_analytical[-1]
-    
+    A[-1, -1] = 1
+    b[-1] = g * H / (2 * omega) * np.cosh(k * h) / np.cosh(k * h)  # Warunek na powierzchni
+
     # Rozwiązanie układu równań metodą eliminacji Gaussa
     phi_solution = gauss_elimination_partial_pivoting(A, b)
-    
+
     return z_vals, phi_solution
 
-# Przykładowe użycie
-N = 10  # Liczba punktów siatki
-L = 10  # Długość fali
-H = 1   # Wysokość fali
-h = 5   # Głębokość wody
-T = 8   # Okres fali
+
+def solve_using_scipy(A_sparse, b):
+    """
+    Rozwiązuje układ równań Ax = b za pomocą gotowej funkcji spsolve z biblioteki scipy.
+    """
+    return spla.spsolve(A_sparse, b)
+
+
+# Uruchomienie porównania
+N = 50
+L = 10
+H = 1
+h = 5
+T = 8
+
+test_gauss_elimination()
 
 z_vals, phi_solution = build_and_solve_wave_system(N, L, H, h, T)
-print("Rozwiązanie φ(z) dla różnych głębokości:")
+
+# Wypisanie rozwiązania
+print("\nRozwiązanie φ(z) dla różnych głębokości:")
 for z, phi in zip(z_vals, phi_solution):
     print(f"z = {z:.2f}, φ = {phi:.4f}")
