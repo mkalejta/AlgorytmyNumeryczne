@@ -5,35 +5,37 @@ import matplotlib.pyplot as plt
 
 def gauss_elimination_partial_pivoting(A, b):
     """
-    Rozwiązuje układ równań Ax = b metodą eliminacji Gaussa z częściowym wyborem elementu podstawowego.
+    Rozwiązuje układ równań Ax = b metodą eliminacji Gaussa z częściowym wyborem elementu podstawowego
+    dla macierzy rzadkich.
     """
-    n = len(A)
-    A = A.astype(float)  # Konwersja na float dla uniknięcia błędów numerycznych
+    n = A.shape[0]
+    A = sp.lil_matrix(A)  # Konwersja na macierz rzadką LIL
     b = b.astype(float)
 
     for k in range(n):
-        max_row = np.argmax(abs(A[k:, k])) + k
-        A[[k, max_row]] = A[[max_row, k]]
+        max_row = np.argmax(np.abs(A[k:, k].toarray().flatten())) + k
+        A[[k, max_row], :] = A[[max_row, k], :].copy()
         b[[k, max_row]] = b[[max_row, k]]
-        
+
         for i in range(k + 1, n):
             factor = A[i, k] / A[k, k]
-            A[i, k:] -= factor * A[k, k:]
+            A[i, k:] -= factor * A[k, k:].toarray()
             b[i] -= factor * b[k]
-    
+
+    A = A.tocsr()  # Konwersja do formatu CSR
     x = np.zeros(n)
+
     for i in range(n - 1, -1, -1):
-        x[i] = (b[i] - np.dot(A[i, i+1:], x[i+1:])) / A[i, i]
-
+        x[i] = ((b[i] - A[i, i+1:].dot(x[i+1:])) / A[i, i]).item()
+        
     return x
-
 
 def test_gauss_elimination():
     """
     Tworzy przykładowy układ równań Ax = b, wypisuje go w czytelnej formie
     i rozwiązuje metodą eliminacji Gaussa.
     """
-    A = np.array([
+    A = sp.lil_matrix([
         [2, -1,  1,  3],
         [1,  3,  2, -2],
         [3,  1, -3,  1],
@@ -43,8 +45,8 @@ def test_gauss_elimination():
     b = np.array([5, 3, -1, 4], dtype=float)
 
     print("\nPrzykładowy układ równań do rozwiązania:")
-    for i in range(len(A)):
-        row = " + ".join(f"{A[i, j]:.1f} * x{j+1}" for j in range(len(A[i])))
+    for i in range(A.shape[0]):
+        row = " + ".join(f"{A[i, j]:.1f} * x{j+1}" for j in range(A.shape[1]))
         print(f"{row} = {b[i]:.1f}")
 
     x = gauss_elimination_partial_pivoting(A, b)
@@ -116,7 +118,7 @@ def solve_using_scipy(A_sparse, b):
     """
     Rozwiązuje układ równań Ax = b za pomocą gotowej funkcji spsolve z biblioteki scipy.
     """
-    return spla.spsolve(A_sparse, b)
+    return spla.spsolve(A_sparse.tocsr(), b)
 
 
 def compare_solutions(N, L, H, h, T):
