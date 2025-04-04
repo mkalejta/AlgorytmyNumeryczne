@@ -98,6 +98,20 @@ def build_and_solve_wave_system(N, L, H, h, T):
     return z_vals, phi_solution
 
 
+def test_wave_system(N, L, H, h, T):
+    """
+    Wywołuje funkcję build_and_solve_wave_system, po czym wypisuje wartości funkcji
+    φ dla poszczególnych argumentów z.
+    """
+
+    z_vals, phi_solution = build_and_solve_wave_system(N, L, H, h, T)
+
+    # Wypisanie rozwiązania
+    print("\nRozwiązanie φ(z) dla różnych głębokości:")
+    for z, phi in zip(z_vals, phi_solution):
+        print(f"z = {z:.2f}, φ = {phi:.4f}")
+        
+        
 def solve_using_scipy(A_sparse, b):
     """
     Rozwiązuje układ równań Ax = b za pomocą gotowej funkcji spsolve z biblioteki scipy.
@@ -105,18 +119,50 @@ def solve_using_scipy(A_sparse, b):
     return spla.spsolve(A_sparse, b)
 
 
-# Uruchomienie porównania
+def compare_solutions(N, L, H, h, T):
+    z_vals, phi_custom = build_and_solve_wave_system(N, L, H, h, T)
+
+    dz = h / (N - 1)
+    A = np.zeros((N, N))
+    b = np.zeros(N)
+
+    for i in range(1, N - 1):
+        A[i, i - 1] = 1 / dz**2
+        A[i, i] = -2 / dz**2
+        A[i, i + 1] = 1 / dz**2
+
+    A[0, 0] = 1
+    b[0] = 0  
+    g = 9.81  
+    k = 2 * np.pi / L  
+    omega = 2 * np.pi / T  
+    A[-1, -1] = 1
+    b[-1] = g * H / (2 * omega) * np.cosh(k * h) / np.cosh(k * h)
+
+    A_sparse = sp.csr_matrix(A)
+    phi_scipy = solve_using_scipy(A_sparse, b)
+
+    # Obliczenie błędu
+    error = np.abs(phi_custom - phi_scipy)
+
+    # Wizualizacja błędu
+    plt.figure(figsize=(10, 6))
+    plt.plot(z_vals, error, 'g-', linewidth=2, label='Różnica między metodami')
+    plt.xlabel('Głębokość z')
+    plt.ylabel('|φ_Gauss - φ_Scipy|')
+    plt.legend()
+    plt.title('Błąd względny między metodami')
+    plt.grid()
+    plt.savefig('wykres_roznic_metod')
+
+    print("\nMaksymalny błąd względny między metodami:", np.max(error))
+
+# Testowanie
 N = 50
 L = 10
 H = 1
 h = 5
 T = 8
-
 test_gauss_elimination()
-
-z_vals, phi_solution = build_and_solve_wave_system(N, L, H, h, T)
-
-# Wypisanie rozwiązania
-print("\nRozwiązanie φ(z) dla różnych głębokości:")
-for z, phi in zip(z_vals, phi_solution):
-    print(f"z = {z:.2f}, φ = {phi:.4f}")
+test_wave_system(N, L, H, h, T)
+compare_solutions(N, L, H, h, T)
