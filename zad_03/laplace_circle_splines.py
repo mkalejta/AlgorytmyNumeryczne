@@ -1,8 +1,11 @@
 import numpy as np
 from scipy.interpolate import CubicSpline
+import matplotlib.pyplot as plt
 
 def grid_circle(N):
-    """Zwraca listę współrzędnych punktów wewnętrznych siatki w kole jednostkowym"""
+    """
+    Zwraca listę współrzędnych punktów wewnętrznych siatki w kole jednostkowym.
+    """
     h = 2.0 / N
     nodes = []
     for i in range(1, N):
@@ -14,11 +17,16 @@ def grid_circle(N):
     return nodes
 
 def boundary_value(x, y, func):
-    """Zwraca wartość warunku brzegowego na okręgu dla danej funkcji analitycznej"""
+    """
+    Zwraca wartość warunku brzegowego na okręgu dla danej funkcji analitycznej.
+    """
     return func(x, y)
 
 def build_system(N, boundary_func):
-    """Buduje układ równań dla równania Laplace'a na kole jednostkowym."""
+    """
+    Buduje układ równań dla równania Laplace'a na kole jednostkowym.
+    Z1: Budowa układu równań liniowych.
+    """
     h = 2.0 / N
     nodes = grid_circle(N)
     node_idx = {p: k for k, p in enumerate(nodes)}
@@ -43,7 +51,10 @@ def build_system(N, boundary_func):
     return A, b, nodes
 
 def gauss_elimination(A, b):
-    """Prosty algorytm eliminacji Gaussa bez wyboru elementu głównego."""
+    """
+    Prosty algorytm eliminacji Gaussa bez wyboru elementu głównego.
+    Z2: Rozwiązanie układu równań metodą Gaussa.
+    """
     A = A.copy()
     b = b.copy()
     n = len(b)
@@ -63,7 +74,10 @@ def gauss_elimination(A, b):
     return x
 
 def gauss_seidel(A, b, x0=None, tol=1e-9, maxiter=20000, verbose=False):
-    """Metoda Gaussa-Seidela dla układów równań liniowych."""
+    """
+    Metoda Gaussa-Seidela dla układów równań liniowych.
+    Z4: Rozwiązanie układu metodą iteracyjną Gaussa-Seidela.
+    """
     n = len(b)
     x = np.zeros(n) if x0 is None else x0.copy()
     for it in range(maxiter):
@@ -82,8 +96,10 @@ def gauss_seidel(A, b, x0=None, tol=1e-9, maxiter=20000, verbose=False):
     return x
 
 def get_section(nodes, values, axis='x'):
-    """Zwraca punkty na przekroju x=0 lub y=0 oraz odpowiadające im wartości.
-    Wybiera punkty najbliższe osi i usuwa duplikaty, zapewniając rosnącą sekwencję."""
+    """
+    Zwraca punkty na przekroju x=0 lub y=0 oraz odpowiadające im wartości.
+    Wybiera punkty najbliższe osi i usuwa duplikaty, zapewniając rosnącą sekwencję.
+    """
     tol = 1e-2  # większa tolerancja
     section_pts = []
     section_vals = []
@@ -113,7 +129,10 @@ def get_section(nodes, values, axis='x'):
     return np.array(unique_pts), np.array(unique_vals)
 
 def solve_laplace(N, boundary_func, method='gauss', verbose=False):
-    """Rozwiązuje układ Laplace'a i zwraca siatkę, rozwiązanie oraz splajny."""
+    """
+    Rozwiązuje układ Laplace'a i zwraca siatkę, rozwiązanie oraz splajny.
+    Pozwala wybrać metodę rozwiązania ('gauss' lub 'seidel').
+    """
     A, b, nodes = build_system(N, boundary_func)
     if method == 'gauss':
         u = gauss_elimination(A, b)
@@ -132,20 +151,16 @@ def solve_laplace(N, boundary_func, method='gauss', verbose=False):
     return nodes, u, spline_x, spline_y, xs, ux, ys, uy
 
 def solve_splines(xs, ux, ys, uy, method='gauss', verbose=False):
-    """Interpoluje splajny przekrojów metodą Gaussa lub Seidela."""
-    # Interpolacja splajnami: wyznacz współczynniki splajnu kubicznego
-    # SciPy CubicSpline rozwiązuje układ trójdiagonalny – możemy go rozwiązać iteracyjnie dla Z5
-    # Zastosujmy Gauss-Seidel do układu trójdiagonalnego
+    """
+    Interpoluje splajny przekrojów metodą Gaussa lub Seidela.
+    Z5: Rozwiązanie układu trójdiagonalnego splajnu metodą iteracyjną.
+    """
     def cubic_spline_system(x, y):
         n = len(x)
         h = np.diff(x)
         alpha = np.zeros(n)
         for i in range(1, n-1):
             alpha[i] = (3/h[i]) * (y[i+1]-y[i]) - (3/h[i-1]) * (y[i]-y[i-1])
-        l = np.ones(n)
-        mu = np.zeros(n)
-        z = np.zeros(n)
-        # Układ trójdiagonalny: A*c = alpha
         A = np.zeros((n, n))
         for i in range(1, n-1):
             A[i, i-1] = h[i-1]
@@ -155,7 +170,6 @@ def solve_splines(xs, ux, ys, uy, method='gauss', verbose=False):
         A[-1,-1] = 1.0
         return A, alpha
 
-    # x przekroju, y wartości
     A_x, alpha_x = cubic_spline_system(xs, ux)
     A_y, alpha_y = cubic_spline_system(ys, uy)
     if method == 'gauss':
@@ -170,23 +184,107 @@ def solve_splines(xs, ux, ys, uy, method='gauss', verbose=False):
             print("Splajny przekrojów: układ rozwiązany metodą Gaussa-Seidela")
     else:
         raise ValueError("method musi być 'gauss' albo 'seidel'")
-    # Możesz dalej użyć c_x, c_y do budowy własnego splajnu, lub porównać z CubicSpline
-    # Dla uproszczenia zwracamy też splajn z SciPy dla wykresu
     spline_x = CubicSpline(xs, ux)
     spline_y = CubicSpline(ys, uy)
     return spline_x, spline_y, c_x, c_y
 
-# --- Przykładowe funkcje brzegowe ---
+############## --- FUNKCJE DO SPRAWOZDANIA/WALIDACJI --- ##############
+
+def test_accuracy(nodes, u, analytical_func):
+    """
+    Sprawdza dokładność rozwiązania: oblicza błędy względem funkcji analitycznej.
+    Zwraca normę maksymalną i średniokwadratową.
+    """
+    u_true = np.array([analytical_func(x, y) for (x, y) in nodes])
+    err = u - u_true
+    max_err = np.max(np.abs(err))
+    mse = np.mean(err**2)
+    return max_err, mse
+
+def plot_cross_section(xs, ux, spline_x, analytical_func=None, axis='x', title_extra="", filename=None):
+    """
+    Rysuje przekrój (numeryczne węzły, splajn, opcjonalnie funkcja analityczna)
+    i zapisuje wykres do pliku, jeśli filename jest podane.
+    """
+    xx = np.linspace(-1, 1, 200)
+    plt.figure(figsize=(8, 4))
+    plt.plot(xs, ux, 'o', label="Węzły przekroju", color='k')
+    plt.plot(xx, spline_x(xx), '-', label="Splajn 3 stopnia")
+    if analytical_func is not None:
+        if axis == 'x':
+            plt.plot(xx, [analytical_func(x, 0) for x in xx], '--', label="F. analityczna")
+        else:
+            plt.plot(xx, [analytical_func(0, y) for y in xx], '--', label="F. analityczna")
+    plt.title(f"Przekrój z({axis},0) {title_extra}")
+    plt.legend()
+    plt.xlabel('x' if axis=='x' else 'y')
+    plt.ylabel('z')
+    plt.grid(True)
+    if filename:
+        plt.savefig(filename, bbox_inches='tight')
+
+def plot_error(nodes, u, analytical_func, filename=None):
+    """
+    Rysuje mapę błędu numerycznego względem funkcji analitycznej na punktach siatki
+    i zapisuje wykres do pliku, jeśli filename jest podane.
+    """
+    u_true = np.array([analytical_func(x, y) for (x, y) in nodes])
+    err = u - u_true
+    x = np.array([p[0] for p in nodes])
+    y = np.array([p[1] for p in nodes])
+    plt.figure(figsize=(6, 5))
+    sc = plt.scatter(x, y, c=err, cmap='bwr', marker='o')
+    plt.colorbar(sc, label="Błąd numeryczny")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.title("Rozkład błędu numerycznego na siatce")
+    plt.axis('equal')
+    if filename:
+        plt.savefig(filename, bbox_inches='tight')
+
+def convergence_study(N_values, boundary_func, analytical_func, method='gauss', filename=None):
+    """
+    Bada zbieżność metody (zmienia N i bada błąd dla coraz gęstszych siatek).
+    Zapisuje wykres do pliku, jeśli filename jest podane.
+    """
+    errors = []
+    hs = []
+    for N in N_values:
+        nodes, u, _, _, _, _, _, _ = solve_laplace(N, boundary_func, method=method)
+        h = 2.0 / N
+        hs.append(h)
+        max_err, mse = test_accuracy(nodes, u, analytical_func)
+        errors.append(max_err)
+        print(f"N={N:2d}  h={h:.4f}  max_err={max_err:.2e}  mse={mse:.2e}")
+    plt.figure()
+    plt.loglog(hs, errors, 'o-', label="Max error")
+    plt.xlabel("h (krok siatki)")
+    plt.ylabel("Błąd maksymalny")
+    plt.title("Zbieżność metody (max error vs h)")
+    plt.grid()
+    plt.legend()
+    if filename:
+        plt.savefig(filename, bbox_inches='tight')
+
+############## --- PRZYKŁADOWE FUNKCJE SPEŁNIAJĄCE WARUNEK LAPLACE'A --- ##############
+
 def f1(x, y):
     return x**2 - y**2
 
 def f2(x, y):
     return np.exp(x) * np.sin(y)
 
+def f3(x, y):
+    return np.cos(x) * np.cosh(y)  # Laplace: Δz = 0
+
+############## --- BLOK GŁÓWNY: TESTY, WALIDACJA, WYKRESY --- ##############
+
 if __name__ == "__main__":
     N = 15
-    # Wybierz funkcję brzegową
+    # Wybierz funkcję brzegową i analityczną do testu
     boundary_func = f1
+    analytical_func = f1
+
     # --- Z1-Z3: rozwiązanie metodą Gaussa ---
     print("Rozwiązanie układu metodą Gaussa dla Laplace'a...")
     nodes, u, spline_x, spline_y, xs, ux, ys, uy = solve_laplace(N, boundary_func, method='gauss', verbose=True)
@@ -205,12 +303,20 @@ if __name__ == "__main__":
     print("Interpolacja splajnami przekrojów (układ trójdiagonalny) metodą Gaussa-Seidela...")
     spline_x2, spline_y2, c_x, c_y = solve_splines(xs, ux, ys, uy, method='seidel', verbose=True)
 
-    # --- Rysowanie wykresów ---
-    import matplotlib.pyplot as plt
-    xx = np.linspace(-1, 1, 200)
-    plt.figure(figsize=(8,4))
-    plt.plot(xx, spline_x(xx), label="splajn SciPy (Gauss, z(x,0))")
-    plt.plot(xx, spline_x2(xx), '--', label="splajn (Seidel, z(x,0))")
-    plt.title("Przekrój z(x,0) – splajny 3 stopnia (SciPy i własny Seidel)")
-    plt.legend()
-    plt.show()
+    # --- Wykresy do sprawozdania ---
+    print("Rysowanie przykładowych przekrojów...")
+    plot_cross_section(xs, ux, spline_x, analytical_func, axis='x', title_extra="(Gauss)", filename="wykres_przekroj_x_gauss.png")
+    plot_cross_section(ys, uy, spline_y, analytical_func, axis='y', title_extra="(Gauss)", filename="wykres_przekroj_y_gauss.png")
+
+    print("Rysowanie przykładowych przekrojów (Seidel dla splajnu)...")
+    plot_cross_section(xs, ux, spline_x2, analytical_func, axis='x', title_extra="(Seidel dla splajnu)", filename="wykres_przekroj_x_seidel.png")
+
+    print("Rysowanie rozkładu błędu...")
+    plot_error(nodes, u, analytical_func, filename="wykres_blad_numeryczny.png")
+
+    print("Test dokładności rozwiązania:")
+    max_err, mse = test_accuracy(nodes, u, analytical_func)
+    print(f"Błąd maksymalny: {max_err:.2e}, MSE: {mse:.2e}")
+
+    print("Badanie zbieżności metody dla kilku siatek (może potrwać)...")
+    convergence_study([8, 12, 16, 20], boundary_func, analytical_func, method='gauss', filename="wykres_zbieznosc.png")
