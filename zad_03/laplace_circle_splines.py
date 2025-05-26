@@ -30,17 +30,17 @@ def build_system(N, boundary_func):
     h = 2.0 / N
     nodes = grid_circle(N)
     node_idx = {p: k for k, p in enumerate(nodes)}
-    A = np.zeros((len(nodes), len(nodes)))
-    b = np.zeros(len(nodes))
+    A = np.zeros((len(nodes), len(nodes))) # macierz układu
+    b = np.zeros(len(nodes)) # wektor prawej strony
 
     for k, (x, y) in enumerate(nodes):
         neighbors = []
         for dx, dy in [(-h, 0), (h, 0), (0, -h), (0, h)]:
             xn, yn = x + dx, y + dy
-            if (xn, yn) in node_idx:
+            if (xn, yn) in node_idx: # sąsiad jest wewnątrz siatki
                 neighbors.append(((xn, yn), 1.0))
             else:
-                if xn**2 + yn**2 <= 1.0 + 1e-12:
+                if xn**2 + yn**2 <= 1.0 + 1e-12: # sąsiad jest na brzegu
                     bv = boundary_value(xn, yn, boundary_func)
                     b[k] -= bv
         A[k, k] = -4.0
@@ -60,16 +60,16 @@ def gauss_elimination(A, b):
     n = len(b)
     for i in range(n):
         pivot = A[i, i]
-        if abs(pivot) < 1e-15:
+        if abs(pivot) < 1e-15: # unikanie dzielenia przez zero
             raise ValueError("Pivot zero!")
         A[i] = A[i] / pivot
         b[i] = b[i] / pivot
-        for j in range(i+1, n):
+        for j in range(i+1, n): # eliminacja
             factor = A[j, i]
             A[j] = A[j] - factor * A[i]
             b[j] = b[j] - factor * b[i]
     x = np.zeros(n)
-    for i in reversed(range(n)):
+    for i in reversed(range(n)): # podstawianie wsteczne
         x[i] = b[i] - np.dot(A[i, i+1:], x[i+1:])
     return x
 
@@ -86,7 +86,7 @@ def gauss_seidel(A, b, x0=None, tol=1e-9, maxiter=20000, verbose=False):
             s1 = np.dot(A[i, :i], x_new[:i])
             s2 = np.dot(A[i, i+1:], x[i+1:])
             x_new[i] = (b[i] - s1 - s2) / A[i, i]
-        if np.linalg.norm(x_new - x, np.inf) < tol:
+        if np.linalg.norm(x_new - x, np.inf) < tol: # sprawdzenie zbieżności
             if verbose:
                 print(f"Gauss-Seidel: zbieżność po {it+1} iteracjach.")
             return x_new
@@ -121,7 +121,7 @@ def get_section(nodes, values, axis='x'):
     unique_pts = []
     unique_vals = []
     last_pt = None
-    for pt, val in section:
+    for pt, val in section: # usuwanie duplikatów
         if last_pt is None or abs(pt - last_pt) > 1e-8:
             unique_pts.append(pt)
             unique_vals.append(val)
@@ -133,21 +133,21 @@ def solve_laplace(N, boundary_func, method='gauss', verbose=False):
     Rozwiązuje układ Laplace'a i zwraca siatkę, rozwiązanie oraz splajny.
     Pozwala wybrać metodę rozwiązania ('gauss' lub 'seidel').
     """
-    A, b, nodes = build_system(N, boundary_func)
+    A, b, nodes = build_system(N, boundary_func) # budowa układu równań
     if method == 'gauss':
-        u = gauss_elimination(A, b)
+        u = gauss_elimination(A, b) # rozwiązanie układu metodą Gaussa
         if verbose:
             print("Rozwiązano układ metodą Gaussa")
     elif method == 'seidel':
-        u = gauss_seidel(A, b, tol=1e-9, maxiter=30000, verbose=verbose)
+        u = gauss_seidel(A, b, tol=1e-9, maxiter=30000, verbose=verbose) # rozwiązanie układu metodą Gaussa-Seidela
         if verbose:
             print("Rozwiązano układ metodą Gaussa-Seidela")
     else:
         raise ValueError("method musi być 'gauss' albo 'seidel'")
     xs, ux = get_section(nodes, u, axis='x')
     ys, uy = get_section(nodes, u, axis='y')
-    spline_x = CubicSpline(xs, ux)
-    spline_y = CubicSpline(ys, uy)
+    spline_x = CubicSpline(xs, ux) # splajn 3 stopnia dla przekroju x=0
+    spline_y = CubicSpline(ys, uy) # splajn 3 stopnia dla przekroju y=0
     return nodes, u, spline_x, spline_y, xs, ux, ys, uy
 
 def solve_splines(xs, ux, ys, uy, method='gauss', verbose=False):
@@ -159,19 +159,19 @@ def solve_splines(xs, ux, ys, uy, method='gauss', verbose=False):
         n = len(x)
         h = np.diff(x)
         alpha = np.zeros(n)
-        for i in range(1, n-1):
+        for i in range(1, n-1): # obliczanie współczynników
             alpha[i] = (3/h[i]) * (y[i+1]-y[i]) - (3/h[i-1]) * (y[i]-y[i-1])
         A = np.zeros((n, n))
-        for i in range(1, n-1):
+        for i in range(1, n-1): # budowa macierzy trójdiagonalnej
             A[i, i-1] = h[i-1]
             A[i, i]   = 2*(h[i-1]+h[i])
             A[i, i+1] = h[i]
-        A[0,0] = 1.0
-        A[-1,-1] = 1.0
+        A[0,0] = 1.0 # warunek brzegowy dla pierwszego węzła
+        A[-1,-1] = 1.0 # warunek brzegowy dla ostatniego węzła
         return A, alpha
 
-    A_x, alpha_x = cubic_spline_system(xs, ux)
-    A_y, alpha_y = cubic_spline_system(ys, uy)
+    A_x, alpha_x = cubic_spline_system(xs, ux) # macierze dla przekrojów
+    A_y, alpha_y = cubic_spline_system(ys, uy) # macierze dla przekrojów
     if method == 'gauss':
         c_x = gauss_elimination(A_x, alpha_x)
         c_y = gauss_elimination(A_y, alpha_y)
@@ -184,8 +184,8 @@ def solve_splines(xs, ux, ys, uy, method='gauss', verbose=False):
             print("Splajny przekrojów: układ rozwiązany metodą Gaussa-Seidela")
     else:
         raise ValueError("method musi być 'gauss' albo 'seidel'")
-    spline_x = CubicSpline(xs, ux)
-    spline_y = CubicSpline(ys, uy)
+    spline_x = CubicSpline(xs, ux) # splajn 3 stopnia dla przekroju x=0
+    spline_y = CubicSpline(ys, uy) # splajn 3 stopnia dla przekroju y=0
     return spline_x, spline_y, c_x, c_y
 
 ############## --- FUNKCJE DO SPRAWOZDANIA/WALIDACJI --- ##############
@@ -195,10 +195,10 @@ def test_accuracy(nodes, u, analytical_func):
     Sprawdza dokładność rozwiązania: oblicza błędy względem funkcji analitycznej.
     Zwraca normę maksymalną i średniokwadratową.
     """
-    u_true = np.array([analytical_func(x, y) for (x, y) in nodes])
-    err = u - u_true
-    max_err = np.max(np.abs(err))
-    mse = np.mean(err**2)
+    u_true = np.array([analytical_func(x, y) for (x, y) in nodes]) # wartości analityczne
+    err = u - u_true # błąd numeryczny
+    max_err = np.max(np.abs(err)) # błąd maksymalny
+    mse = np.mean(err**2) # średniokwadratowy błąd
     return max_err, mse
 
 def plot_cross_section(xs, ux, spline_x, analytical_func=None, axis='x', title_extra="", filename=None):
@@ -310,6 +310,7 @@ if __name__ == "__main__":
 
     print("Rysowanie przykładowych przekrojów (Seidel dla splajnu)...")
     plot_cross_section(xs, ux, spline_x2, analytical_func, axis='x', title_extra="(Seidel dla splajnu)", filename="wykres_przekroj_x_seidel.png")
+    plot_cross_section(ys, uy, spline_y2, analytical_func, axis='y', title_extra="(Seidel dla splajnu)", filename="wykres_przekroj_y_seidel.png")
 
     print("Rysowanie rozkładu błędu...")
     plot_error(nodes, u, analytical_func, filename="wykres_blad_numeryczny.png")
