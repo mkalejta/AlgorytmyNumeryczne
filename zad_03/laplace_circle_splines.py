@@ -156,20 +156,28 @@ def solve_splines(xs, ux, ys, uy, method='gauss', verbose=False):
     """
     Interpoluje splajny przekrojów metodą Gaussa lub Seidela.
     Z5: Rozwiązanie układu trójdiagonalnego splajnu metodą iteracyjną.
+    
+    Parametry:
+    - xs, ux: współrzędne i wartości funkcji wzdłuż osi X
+    - ys, uy: współrzędne i wartości funkcji wzdłuż osi Y
+    - method: 'gauss' lub 'seidel' — wybór metody rozwiązywania układu
+    - verbose: jeśli True, wypisuje szczegóły działania
     """
     def cubic_spline_system(x, y):
         n = len(x)
         h = np.diff(x)
         alpha = np.zeros(n)
-        for i in range(1, n-1): # obliczanie współczynników
+        # Obliczenie wektora alpha (pochodnych drugiego rzędu) w punktach wewnętrznych
+        for i in range(1, n-1): 
             alpha[i] = (3/h[i]) * (y[i+1]-y[i]) - (3/h[i-1]) * (y[i]-y[i-1])
         A = np.zeros((n, n))
         for i in range(1, n-1): # budowa macierzy trójdiagonalnej
             A[i, i-1] = h[i-1]
             A[i, i]   = 2*(h[i-1]+h[i])
             A[i, i+1] = h[i]
-        A[0,0] = 1.0 # warunek brzegowy dla pierwszego węzła
-        A[-1,-1] = 1.0 # warunek brzegowy dla ostatniego węzła
+        # Warunki brzegowe naturalnego splajnu (druga pochodna = 0)
+        A[0,0] = 1.0
+        A[-1,-1] = 1.0
         return A, alpha
 
     A_x, alpha_x = cubic_spline_system(xs, ux) # macierze dla przekrojów
@@ -417,9 +425,6 @@ def f1(x, y):
 def f2(x, y):
     return np.exp(x) * np.sin(y)
 
-def f3(x, y):
-    return np.cos(x) * np.cosh(y)  # Laplace: Δz = 0
-
 ############## --- BLOK GŁÓWNY: TESTY, WALIDACJA, WYKRESY --- ##############
 
 if __name__ == "__main__":
@@ -427,6 +432,17 @@ if __name__ == "__main__":
     # Wybierz funkcję brzegową i analityczną do testu
     boundary_func = f1
     analytical_func = f1
+
+    # --- DODATKOWO: generowanie plików .txt dla funkcji f2 ---
+    # print("Generowanie plików .txt dla funkcji f2 (Gauss i Seidel)...")
+    # nodes_f2, u_f2, *_ = solve_laplace(N, f2, method='gauss', verbose=False)
+    # with open("exp_sin_generated_gauss.txt", "w") as f:
+    #     for (x, y), val in zip(nodes_f2, u_f2):
+    #         f.write(f"{x:.8f}\t{y:.8f}\t{val:.8f}\n")
+    # nodes_f2s, u_f2s, *_ = solve_laplace(N, f2, method='seidel', verbose=False)
+    # with open("exp_sin_generated_seidel.txt", "w") as f:
+    #     for (x, y), val in zip(nodes_f2s, u_f2s):
+    #         f.write(f"{x:.8f}\t{y:.8f}\t{val:.8f}\n")
 
     # --- Z1-Z3: rozwiązanie metodą Gaussa ---
     print("Rozwiązanie układu metodą Gaussa dla Laplace'a...")
@@ -441,7 +457,7 @@ if __name__ == "__main__":
     with open("xx_minus_yy_generated_seidel.txt", "w") as f:
         for (x, y), val in zip(nodes_s, u_s):
             f.write(f"{x:.8f}\t{y:.8f}\t{val:.8f}\n")
-
+    
     # --- Z5: interpolacja splajnami przekrojów metodą Gaussa-Seidela ---
     print("Interpolacja splajnami przekrojów (układ trójdiagonalny) metodą Gaussa-Seidela...")
     spline_x2, spline_y2, c_x, c_y = solve_splines(xs, ux, ys, uy, method='seidel', verbose=True)
