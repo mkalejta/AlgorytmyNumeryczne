@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.interpolate import CubicSpline
 import matplotlib.pyplot as plt
+import time
 
 def grid_circle(N):
     """
@@ -43,9 +44,10 @@ def build_system(N, boundary_func):
                 if xn**2 + yn**2 <= 1.0 + 1e-12: # sąsiad jest na brzegu
                     bv = boundary_value(xn, yn, boundary_func)
                     b[k] -= bv
-        A[k, k] = -4.0
+        A[k, k] = -4.0 # współczynnik dla punktu centralnego
         for (xn, yn), coeff in neighbors:
             A[k, node_idx[(xn, yn)]] = coeff
+    # Dyskretyzacja Laplace'a
     A /= h**2
     b /= h**2
     return A, b, nodes
@@ -83,8 +85,8 @@ def gauss_seidel(A, b, x0=None, tol=1e-9, maxiter=20000, verbose=False):
     for it in range(maxiter):
         x_new = x.copy()
         for i in range(n):
-            s1 = np.dot(A[i, :i], x_new[:i])
-            s2 = np.dot(A[i, i+1:], x[i+1:])
+            s1 = np.dot(A[i, :i], x_new[:i]) # suma dla już obliczonych wartości
+            s2 = np.dot(A[i, i+1:], x[i+1:]) # suma dla jeszcze nieobliczonych wartości
             x_new[i] = (b[i] - s1 - s2) / A[i, i]
         if np.linalg.norm(x_new - x, np.inf) < tol: # sprawdzenie zbieżności
             if verbose:
@@ -188,7 +190,8 @@ def solve_splines(xs, ux, ys, uy, method='gauss', verbose=False):
     spline_y = CubicSpline(ys, uy) # splajn 3 stopnia dla przekroju y=0
     return spline_x, spline_y, c_x, c_y
 
-############## --- FUNKCJE DO SPRAWOZDANIA/WALIDACJI --- ##############
+
+############## --- FUNKCJA DO SPRAWOZDANIA/WALIDACJI --- ##############
 
 def test_accuracy(nodes, u, analytical_func):
     """
@@ -200,6 +203,9 @@ def test_accuracy(nodes, u, analytical_func):
     max_err = np.max(np.abs(err)) # błąd maksymalny
     mse = np.mean(err**2) # średniokwadratowy błąd
     return max_err, mse
+
+
+############## --- FUNKCJE DO WYKRESÓW --- ##############
 
 def plot_cross_section(xs, ux, spline_x, analytical_func=None, axis='x', title_extra="", filename=None):
     """
@@ -266,6 +272,143 @@ def convergence_study(N_values, boundary_func, analytical_func, method='gauss', 
     if filename:
         plt.savefig(filename, bbox_inches='tight')
 
+def plot_circle_grid(N, filename="siatka.png"):
+    points = grid_circle(N)
+    x_vals, y_vals = zip(*points)
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.scatter(x_vals, y_vals, color='blue', s=10)
+    circle = plt.Circle((0, 0), 1.0, color='red', fill=False, linewidth=2, linestyle='--')
+    ax.add_patch(circle)
+    ax.set_title(f"Siatka punktów wewnątrz koła jednostkowego z obrysem (N={N})")
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_aspect('equal')
+    ax.grid(True)
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+
+
+def compare_methods(N, boundary_func, analytical_func, verbose=False):
+    """
+    Porównuje metody Gaussa i Gaussa-Seidela dla danego N.
+    Zwraca błędy i czasy wykonania oraz rysuje wykresy przekrojów.
+    """
+    # Metoda Gaussa
+    start_gauss = time.time()
+    nodes_g, u_g, spline_x_g, spline_y_g, xs_g, ux_g, ys_g, uy_g = solve_laplace(N, boundary_func, method='gauss', verbose=verbose)
+    time_gauss = time.time() - start_gauss
+    err_g_max, err_g_mse = test_accuracy(nodes_g, u_g, analytical_func)
+
+    # Metoda Gaussa-Seidela
+    start_seidel = time.time()
+    nodes_s, u_s, spline_x_s, spline_y_s, xs_s, ux_s, ys_s, uy_s = solve_laplace(N, boundary_func, method='seidel', verbose=verbose)
+    time_seidel = time.time() - start_seidel
+    err_s_max, err_s_mse = test_accuracy(nodes_s, u_s, analytical_func)
+
+    print(f"Porównanie metod dla N={N}:")
+    print(f"- Gauss:       czas = {time_gauss:.4f} s,  max_err = {err_g_max:.2e}, MSE = {err_g_mse:.2e}")
+    print(f"- Gauss-Seidel: czas = {time_seidel:.4f} s,  max_err = {err_s_max:.2e}, MSE = {err_s_mse:.2e}")
+
+    # Wykres przekrojów dla x
+    xx = np.linspace(-1, 1, 200)
+    plt.figure(figsize=(8, 4))
+    plt.plot(xs_g, ux_g, 'o', label='Gauss (punkty)', color='black')
+    plt.plot(xx, spline_x_g(xx), '-', label='Gauss (splajn)')
+    plt.plot(xx, spline_x_s(xx), '--', label='Seidel (splajn)')
+    plt.plot(xx, [analytical_func(x, 0) for x in xx], ':', label='F. analityczna')
+    plt.title(f"Przekrój wzdłuż osi x dla N={N}")
+    plt.xlabel('x')
+    plt.ylabel('z')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(f"porownanie_przekroj_x_N{N}.png")
+    plt.close()
+
+    # Zwróć dane do dalszej analizy/raportu
+    return {
+        'gauss': {'time': time_gauss, 'max_err': err_g_max, 'mse': err_g_mse},
+        'seidel': {'time': time_seidel, 'max_err': err_s_max, 'mse': err_s_mse}
+    }
+
+def benchmark_methods(N_values, boundary_func, analytical_func, filename_time="czas_vs_N.png", filename_error="blad_vs_N.png"):
+    """
+    Porównuje czas działania i dokładność metod: Gaussa i Gaussa-Seidela.
+    Zapisuje dwa wykresy: czas vs N oraz błąd maksymalny vs N.
+    """
+    times_gauss, times_seidel = [], []
+    errors_gauss, errors_seidel = [], []
+
+    for N in N_values:
+        print(f"--- N = {N} ---")
+        h = 2.0 / N
+
+        # Metoda Gaussa
+        t0 = time.time()
+        nodes_g, u_g, *_ = solve_laplace(N, boundary_func, method='gauss')
+        t_gauss = time.time() - t0
+        max_err_g, _ = test_accuracy(nodes_g, u_g, analytical_func)
+
+        # Metoda Gaussa-Seidela
+        t0 = time.time()
+        nodes_s, u_s, *_ = solve_laplace(N, boundary_func, method='seidel')
+        t_seidel = time.time() - t0
+        max_err_s, _ = test_accuracy(nodes_s, u_s, analytical_func)
+
+        times_gauss.append(t_gauss)
+        times_seidel.append(t_seidel)
+        errors_gauss.append(max_err_g)
+        errors_seidel.append(max_err_s)
+
+    # Wykres czasu działania
+    plt.figure()
+    plt.plot(N_values, times_gauss, 'o-', label='Gauss')
+    plt.plot(N_values, times_seidel, 's--', label='Gauss-Seidel')
+    plt.xlabel("N")
+    plt.ylabel("Czas działania [s]")
+    plt.title("Porównanie czasu działania metod")
+    plt.legend()
+    plt.grid()
+    plt.savefig(filename_time, bbox_inches='tight')
+    plt.close()
+
+    # Wykres błędu
+    plt.figure()
+    plt.plot(N_values, errors_gauss, 'o-', label='Gauss')
+    plt.plot(N_values, errors_seidel, 's--', label='Gauss-Seidel')
+    plt.xlabel("N")
+    plt.ylabel("Błąd maksymalny")
+    plt.title("Porównanie błędu metod")
+    plt.yscale('log')
+    plt.legend()
+    plt.grid()
+    plt.savefig(filename_error, bbox_inches='tight')
+    plt.close()
+
+
+def plot_solution_difference(nodes1, u1, nodes2, u2, filename="roznica_gauss_vs_seidel.png"):
+    """
+    Rysuje różnicę między wynikami dwóch metod (zakładamy, że nodes1 == nodes2).
+    """
+    if len(nodes1) != len(nodes2):
+        raise ValueError("Liczba węzłów się nie zgadza!")
+    diff = np.array(u1) - np.array(u2)
+    x = [x for (x, y) in nodes1]
+    y = [y for (x, y) in nodes1]
+
+    plt.figure(figsize=(6, 5))
+    sc = plt.scatter(x, y, c=diff, cmap='bwr', marker='o')
+    plt.colorbar(sc, label="Różnica Gauss - Seidel")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.title("Różnica rozwiązań Gauss vs Seidel")
+    plt.axis('equal')
+    plt.grid(True)
+    plt.savefig(filename, bbox_inches='tight')
+    plt.close()
+
 ############## --- PRZYKŁADOWE FUNKCJE SPEŁNIAJĄCE WARUNEK LAPLACE'A --- ##############
 
 def f1(x, y):
@@ -321,3 +464,19 @@ if __name__ == "__main__":
 
     print("Badanie zbieżności metody dla kilku siatek (może potrwać)...")
     convergence_study([8, 12, 16, 20], boundary_func, analytical_func, method='gauss', filename="wykres_zbieznosc.png")
+    
+    plot_circle_grid(N)
+
+    # --- Porównanie metod --- #
+    print("\nPorównanie metod eliminacji Gaussa i Gaussa-Seidela:")
+    results = compare_methods(N=15, boundary_func=boundary_func, analytical_func=analytical_func, verbose=True)
+
+    # --- Porównanie metod: czas vs N i błąd vs N ---
+    N_values = [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]
+    benchmark_methods(N_values, boundary_func, analytical_func,
+                      filename_time="porownanie_czas.png",
+                      filename_error="porownanie_blad.png")
+
+    # --- Porównanie różnicy rozwiązania ---
+    print("Rysowanie różnicy rozwiązań Gauss vs Seidel...")
+    plot_solution_difference(nodes, u, nodes_s, u_s, filename="roznica_gauss_vs_seidel.png")
