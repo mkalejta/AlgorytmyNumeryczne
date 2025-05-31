@@ -2,76 +2,139 @@ import numpy as np
 from scipy.interpolate import CubicSpline
 import matplotlib.pyplot as plt
 import time
+import math
 
-def grid_circle(N):
-    """
-    Zwraca listę współrzędnych punktów wewnętrznych siatki w kole jednostkowym.
-    """
+def grid_circle(N, boundary_func=lambda x, y: x**2 - y**2):
     h = 2.0 / N
-    nodes = []
-    for i in range(1, N):
-        x = -1 + i * h
-        for j in range(1, N):
-            y = -1 + j * h
-            if x**2 + y**2 < 1.0 - 1e-12:  # punkt wewnętrzny okręgu
-                nodes.append((x, y))
-    return nodes
+    nodes = set()
+    visited = set()
+    boundary_data = {}
+    precision = 8
+    tol = 1e-8
+    edge_tol = 1e-6
 
-def boundary_value(x, y, func):
-    """
-    Zwraca wartość warunku brzegowego na okręgu dla danej funkcji analitycznej.
-    """
-    return func(x, y)
-
-def build_system(N, boundary_func):
-    """
-    Buduje układ równań dla równania Laplace'a na kole jednostkowym.
-    Z1: Budowa układu równań liniowych.
-    """
-    h = 2.0 / N
-    nodes = grid_circle(N)
-    node_idx = {p: k for k, p in enumerate(nodes)}
-    A = np.zeros((len(nodes), len(nodes))) # macierz układu
-    b = np.zeros(len(nodes)) # wektor prawej strony
-
-    for k, (x, y) in enumerate(nodes):
-        neighbors = []
+    for i in range(math.floor(N/2) + 1):
+        x = round(i * h, precision)
+        x2 = round(-i * h, precision)
+        for j in range(math.floor(N/2) + 1):
+            y = round(j * h, precision)
+            y2 = round(-j * h, precision)
+            for xx, yy in [(x, y), (x2, y), (x, y2), (x2, y2)]:
+                r2 = xx**2 + yy**2
+                # Dodaj tylko punkty wyraźnie wewnątrz koła (nie na brzegu)
+                if r2 < 1.0 - tol and abs(r2 - 1.0) > edge_tol:
+                    nodes.add((xx, yy))
+                    
+    # # Iteracyjne usuwanie punktów z mniej niż dwoma sąsiadami
+    # while True:
+    #     filtered_nodes = set()
+    #     for x, y in nodes:
+    #         neighbor_count = 0
+    #         for dx, dy in [(-h, 0), (h, 0), (0, -h), (0, h)]:
+    #             xn = round(x + dx, precision)
+    #             yn = round(y + dy, precision)
+    #             if (xn, yn) in nodes:
+    #                 neighbor_count += 1
+    #         if neighbor_count >= 2:
+    #             filtered_nodes.add((x, y))
+    #     if len(filtered_nodes) == len(nodes):
+    #         break
+    #     nodes = filtered_nodes
+    
+    # teraz dla każdego punktu wewnętrznego sprawdzamy sąsiadów poza kołem
+    for x, y in nodes.copy():
         for dx, dy in [(-h, 0), (h, 0), (0, -h), (0, h)]:
-            xn, yn = x + dx, y + dy
-            if (xn, yn) in node_idx: # sąsiad jest wewnątrz siatki
-                neighbors.append(((xn, yn), 1.0))
-            else:
-                if xn**2 + yn**2 <= 1.0 + 1e-12: # sąsiad jest na brzegu
-                    bv = boundary_value(xn, yn, boundary_func)
-                    b[k] -= bv
-        A[k, k] = -4.0 # współczynnik dla punktu centralnego
-        for (xn, yn), coeff in neighbors:
-            A[k, node_idx[(xn, yn)]] = coeff
-    # Dyskretyzacja Laplace'a
-    A /= h**2
-    b /= h**2
-    return A, b, nodes
+            xn = round(x + dx, precision)
+            yn = round(y + dy, precision)
+            r2n = xn**2 + yn**2
+            if r2n > 1.0 and (xn, yn) not in visited:
+                # wyjście poza – znajdź przecięcie i dodaj punkt na brzegu
+                a = dx**2 + dy**2
+                bq = 2 * (x * dx + y * dy)
+                c = x**2 + y**2 - 1.0
+                disc = bq**2 - 4 * a * c
+                if disc >= 0:
+                    t = (-bq + np.sqrt(disc)) / (2 * a)
+                    xb = round(x + t * dx, precision)
+                    yb = round(y + t * dy, precision)
+                    if (xb, yb) not in visited:
+                        h_prim = np.sqrt((xb - x)**2 + (yb - y)**2)
+                        visited.add((xb, yb))
+                        boundary_data[(xb, yb)] = (boundary_func(xb, yb), h_prim, (x, y))
+
+    return sorted(nodes), boundary_data
+
+
+def build_system(N):
+    h = 2.0 / N
+    nodes, boundary_data = grid_circle(N)
+    boundary_points = [p for p in boundary_data.keys() if p not in nodes]
+    all_points = nodes + boundary_points
+    node_idx = {p: i for i, p in enumerate(all_points)}
+    A = np.zeros((len(all_points), len(all_points)))
+    b = np.zeros(len(all_points))
+    precision = 8
+
+    # 1. Punkty wewnętrzne
+    for i, (x, y) in enumerate(nodes):
+        for dx, dy in [(-h, 0), (h, 0), (0, -h), (0, h)]:
+            xn = round(x + dx, precision)
+            yn = round(y + dy, precision)
+            if (xn, yn) in node_idx:
+                j = node_idx[(xn, yn)]
+                A[i, j] += 1.0 / h**2
+                A[i, i] -= 1.0 / h**2
+            elif (xn, yn) in boundary_data:
+                z_b, h_prim, _ = boundary_data[(xn, yn)]
+                # Zgodnie z rysunkiem: (z_b - z_p)/h' - (z_p - z_p2)/h
+                # czyli: -z_p*(1/h' + 1/h) + z_b/h'
+                A[i, i] -= 1.0 / (h * h_prim)
+                b[i] -= z_b / (h * h_prim)
+        # Laplasjan = 0, więc prawa strona zostaje taka
+
+    # 2. Punkty brzegowe
+    for p, (z_b, _, _) in boundary_data.items():
+        if p in node_idx and node_idx[p] >= len(nodes):
+            idx = node_idx[p]
+            A[idx, idx] = 1.0
+            b[idx] = z_b
+    
+    # 3. Sprawdzenie zer na przekątnej macierzy A
+    diag = np.diag(A)
+    zero_diag_indices = np.where(np.abs(diag) < 1e-12)[0]
+    if len(zero_diag_indices) > 0:
+        print("UWAGA: Zerowe elementy na przekątnej macierzy A!")
+        for idx in zero_diag_indices:
+            print(f"Indeks: {idx}, punkt: {all_points[idx]}, A[{idx},{idx}] = {A[idx, idx]}")
+        
+    return A, b, all_points
 
 def gauss_elimination(A, b):
     """
-    Prosty algorytm eliminacji Gaussa bez wyboru elementu głównego.
-    Z2: Rozwiązanie układu równań metodą Gaussa.
+    Prosty algorytm eliminacji Gaussa Z WYBOREM ELEMENTU GŁÓWNEGO.
     """
     A = A.copy()
     b = b.copy()
     n = len(b)
+    print("Symetryczność macierzy:", np.allclose(A, A.T))
     for i in range(n):
-        pivot = A[i, i]
-        if abs(pivot) < 1e-15: # unikanie dzielenia przez zero
+        # Wybór elementu głównego
+        max_row = np.argmax(np.abs(A[i:, i])) + i
+        if abs(A[max_row, i]) < 1e-8:
             raise ValueError("Pivot zero!")
+        if max_row != i:
+            A[[i, max_row]] = A[[max_row, i]]
+            b[i], b[max_row] = b[max_row], b[i]
+        pivot = A[i, i]
+        print(f"Pivot {i}: {pivot:.4e}")
         A[i] = A[i] / pivot
         b[i] = b[i] / pivot
-        for j in range(i+1, n): # eliminacja
+        for j in range(i+1, n):
             factor = A[j, i]
             A[j] = A[j] - factor * A[i]
             b[j] = b[j] - factor * b[i]
     x = np.zeros(n)
-    for i in reversed(range(n)): # podstawianie wsteczne
+    for i in reversed(range(n)):
         x[i] = b[i] - np.dot(A[i, i+1:], x[i+1:])
     return x
 
@@ -130,14 +193,14 @@ def get_section(nodes, values, axis='x'):
             last_pt = pt
     return np.array(unique_pts), np.array(unique_vals)
 
-def solve_laplace(N, boundary_func, method='gauss', verbose=False):
+def solve_laplace(N, method='gauss', verbose=False):
     """
     Rozwiązuje układ Laplace'a i zwraca siatkę, rozwiązanie oraz splajny.
     Pozwala wybrać metodę rozwiązania ('gauss' lub 'seidel').
     """
-    A, b, nodes = build_system(N, boundary_func) # budowa układu równań
+    A, b, nodes = build_system(N) # budowa układu równań
     if method == 'gauss':
-        u = gauss_elimination(A, b) # rozwiązanie układu metodą Gaussa
+        u = np.linalg.solve(A, b) # rozwiązanie układu metodą Gaussa / ZAMIENIŁEM NA WBUDOWANĄ FUNKCJĘ
         if verbose:
             print("Rozwiązano układ metodą Gaussa")
     elif method == 'seidel':
@@ -264,7 +327,7 @@ def convergence_study(N_values, boundary_func, analytical_func, method='gauss', 
     errors = []
     hs = []
     for N in N_values:
-        nodes, u, _, _, _, _, _, _ = solve_laplace(N, boundary_func, method=method)
+        nodes, u, _, _, _, _, _, _ = solve_laplace(N, method=method)
         h = 2.0 / N
         hs.append(h)
         max_err, mse = test_accuracy(nodes, u, analytical_func)
@@ -281,7 +344,7 @@ def convergence_study(N_values, boundary_func, analytical_func, method='gauss', 
         plt.savefig(filename, bbox_inches='tight')
 
 def plot_circle_grid(N, filename="siatka.png"):
-    points = grid_circle(N)
+    points, _ = grid_circle(N)
     x_vals, y_vals = zip(*points)
 
     fig, ax = plt.subplots(figsize=(6, 6))
@@ -305,13 +368,13 @@ def compare_methods(N, boundary_func, analytical_func, verbose=False):
     """
     # Metoda Gaussa
     start_gauss = time.time()
-    nodes_g, u_g, spline_x_g, spline_y_g, xs_g, ux_g, ys_g, uy_g = solve_laplace(N, boundary_func, method='gauss', verbose=verbose)
+    nodes_g, u_g, spline_x_g, spline_y_g, xs_g, ux_g, ys_g, uy_g = solve_laplace(N, method='gauss', verbose=verbose)
     time_gauss = time.time() - start_gauss
     err_g_max, err_g_mse = test_accuracy(nodes_g, u_g, analytical_func)
 
     # Metoda Gaussa-Seidela
     start_seidel = time.time()
-    nodes_s, u_s, spline_x_s, spline_y_s, xs_s, ux_s, ys_s, uy_s = solve_laplace(N, boundary_func, method='seidel', verbose=verbose)
+    nodes_s, u_s, spline_x_s, spline_y_s, xs_s, ux_s, ys_s, uy_s = solve_laplace(N, method='seidel', verbose=verbose)
     time_seidel = time.time() - start_seidel
     err_s_max, err_s_mse = test_accuracy(nodes_s, u_s, analytical_func)
 
@@ -341,7 +404,7 @@ def compare_methods(N, boundary_func, analytical_func, verbose=False):
         'seidel': {'time': time_seidel, 'max_err': err_s_max, 'mse': err_s_mse}
     }
 
-def benchmark_methods(N_values, boundary_func, analytical_func, filename_time="czas_vs_N.png", filename_error="blad_vs_N.png"):
+def benchmark_methods(N_values, analytical_func, filename_time="czas_vs_N.png", filename_error="blad_vs_N.png"):
     """
     Porównuje czas działania i dokładność metod: Gaussa i Gaussa-Seidela.
     Zapisuje dwa wykresy: czas vs N oraz błąd maksymalny vs N.
@@ -355,13 +418,13 @@ def benchmark_methods(N_values, boundary_func, analytical_func, filename_time="c
 
         # Metoda Gaussa
         t0 = time.time()
-        nodes_g, u_g, *_ = solve_laplace(N, boundary_func, method='gauss')
+        nodes_g, u_g, *_ = solve_laplace(N, method='gauss')
         t_gauss = time.time() - t0
         max_err_g, _ = test_accuracy(nodes_g, u_g, analytical_func)
 
         # Metoda Gaussa-Seidela
         t0 = time.time()
-        nodes_s, u_s, *_ = solve_laplace(N, boundary_func, method='seidel')
+        nodes_s, u_s, *_ = solve_laplace(N, method='seidel')
         t_seidel = time.time() - t0
         max_err_s, _ = test_accuracy(nodes_s, u_s, analytical_func)
 
@@ -432,7 +495,6 @@ if __name__ == "__main__":
     # Wybierz funkcję brzegową i analityczną do testu
     boundary_func = f1
     analytical_func = f1
-
     # --- DODATKOWO: generowanie plików .txt dla funkcji f2 ---
     # print("Generowanie plików .txt dla funkcji f2 (Gauss i Seidel)...")
     # nodes_f2, u_f2, *_ = solve_laplace(N, f2, method='gauss', verbose=False)
@@ -446,14 +508,14 @@ if __name__ == "__main__":
 
     # --- Z1-Z3: rozwiązanie metodą Gaussa ---
     print("Rozwiązanie układu metodą Gaussa dla Laplace'a...")
-    nodes, u, spline_x, spline_y, xs, ux, ys, uy = solve_laplace(N, boundary_func, method='gauss', verbose=True)
+    nodes, u, spline_x, spline_y, xs, ux, ys, uy = solve_laplace(N, method='gauss', verbose=True)
     with open("xx_minus_yy_generated_gauss.txt", "w") as f:
         for (x, y), val in zip(nodes, u):
             f.write(f"{x:.8f}\t{y:.8f}\t{val:.8f}\n")
 
     # --- Z4: rozwiązanie metodą Gaussa-Seidela ---
     print("Rozwiązanie układu metodą Gaussa-Seidela dla Laplace'a...")
-    nodes_s, u_s, spline_x_s, spline_y_s, xs_s, ux_s, ys_s, uy_s = solve_laplace(N, boundary_func, method='seidel', verbose=True)
+    nodes_s, u_s, spline_x_s, spline_y_s, xs_s, ux_s, ys_s, uy_s = solve_laplace(N, method='seidel', verbose=True)
     with open("xx_minus_yy_generated_seidel.txt", "w") as f:
         for (x, y), val in zip(nodes_s, u_s):
             f.write(f"{x:.8f}\t{y:.8f}\t{val:.8f}\n")
@@ -488,10 +550,10 @@ if __name__ == "__main__":
     results = compare_methods(N=15, boundary_func=boundary_func, analytical_func=analytical_func, verbose=True)
 
     # --- Porównanie metod: czas vs N i błąd vs N ---
-    N_values = [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]
-    benchmark_methods(N_values, boundary_func, analytical_func,
-                      filename_time="porownanie_czas.png",
-                      filename_error="porownanie_blad.png")
+    # N_values = [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]
+    # benchmark_methods(N_values, analytical_func,
+    #                   filename_time="porownanie_czas.png",
+    #                   filename_error="porownanie_blad.png")
 
     # --- Porównanie różnicy rozwiązania ---
     print("Rysowanie różnicy rozwiązań Gauss vs Seidel...")
