@@ -4,14 +4,11 @@ import matplotlib.pyplot as plt
 import time
 import math
 
-def grid_circle(N, boundary_func=lambda x, y: x**2 - y**2):
+def grid_circle(N):
     h = 2.0 / N
     nodes = set()
-    visited = set()
-    boundary_data = {}
     precision = 8
     tol = 1e-8
-    edge_tol = 1e-6
 
     for i in range(math.floor(N/2) + 1):
         x = round(i * h, precision)
@@ -21,93 +18,52 @@ def grid_circle(N, boundary_func=lambda x, y: x**2 - y**2):
             y2 = round(-j * h, precision)
             for xx, yy in [(x, y), (x2, y), (x, y2), (x2, y2)]:
                 r2 = xx**2 + yy**2
-                # Dodaj tylko punkty wyraźnie wewnątrz koła (nie na brzegu)
-                if r2 < 1.0 - tol and abs(r2 - 1.0) > edge_tol:
+                if r2 < 1.0 - tol:
                     nodes.add((xx, yy))
-                    
-    # # Iteracyjne usuwanie punktów z mniej niż dwoma sąsiadami
-    # while True:
-    #     filtered_nodes = set()
-    #     for x, y in nodes:
-    #         neighbor_count = 0
-    #         for dx, dy in [(-h, 0), (h, 0), (0, -h), (0, h)]:
-    #             xn = round(x + dx, precision)
-    #             yn = round(y + dy, precision)
-    #             if (xn, yn) in nodes:
-    #                 neighbor_count += 1
-    #         if neighbor_count >= 2:
-    #             filtered_nodes.add((x, y))
-    #     if len(filtered_nodes) == len(nodes):
-    #         break
-    #     nodes = filtered_nodes
-    
-    # teraz dla każdego punktu wewnętrznego sprawdzamy sąsiadów poza kołem
-    for x, y in nodes.copy():
-        for dx, dy in [(-h, 0), (h, 0), (0, -h), (0, h)]:
-            xn = round(x + dx, precision)
-            yn = round(y + dy, precision)
-            r2n = xn**2 + yn**2
-            if r2n > 1.0 and (xn, yn) not in visited:
-                # wyjście poza – znajdź przecięcie i dodaj punkt na brzegu
-                a = dx**2 + dy**2
-                bq = 2 * (x * dx + y * dy)
-                c = x**2 + y**2 - 1.0
-                disc = bq**2 - 4 * a * c
-                if disc >= 0:
-                    t = (-bq + np.sqrt(disc)) / (2 * a)
-                    xb = round(x + t * dx, precision)
-                    yb = round(y + t * dy, precision)
-                    if (xb, yb) not in visited:
-                        h_prim = np.sqrt((xb - x)**2 + (yb - y)**2)
-                        visited.add((xb, yb))
-                        boundary_data[(xb, yb)] = (boundary_func(xb, yb), h_prim, (x, y))
 
-    return sorted(nodes), boundary_data
+    return sorted(nodes)
 
 
-def build_system(N):
+def build_system(N, boundary_func=lambda x, y: x**2 - y**2):
     h = 2.0 / N
-    nodes, boundary_data = grid_circle(N)
-    boundary_points = [p for p in boundary_data.keys() if p not in nodes]
-    all_points = nodes + boundary_points
-    node_idx = {p: i for i, p in enumerate(all_points)}
-    A = np.zeros((len(all_points), len(all_points)))
-    b = np.zeros(len(all_points))
+    nodes = grid_circle(N)
+    node_idx = {p: i for i, p in enumerate(nodes)}
+    A = np.zeros((len(nodes), len(nodes)))
+    b = np.zeros(len(nodes))
     precision = 8
+    tol = 1e-8
 
-    # 1. Punkty wewnętrzne
-    for i, (x, y) in enumerate(nodes):
-        for dx, dy in [(-h, 0), (h, 0), (0, -h), (0, h)]:
-            xn = round(x + dx, precision)
-            yn = round(y + dy, precision)
-            if (xn, yn) in node_idx:
-                j = node_idx[(xn, yn)]
-                A[i, j] += 1.0 / h**2
-                A[i, i] -= 1.0 / h**2
-            elif (xn, yn) in boundary_data:
-                z_b, h_prim, _ = boundary_data[(xn, yn)]
-                # Zgodnie z rysunkiem: (z_b - z_p)/h' - (z_p - z_p2)/h
-                # czyli: -z_p*(1/h' + 1/h) + z_b/h'
-                A[i, i] -= 1.0 / (h * h_prim)
-                b[i] -= z_b / (h * h_prim)
-        # Laplasjan = 0, więc prawa strona zostaje taka
-
-    # 2. Punkty brzegowe
-    for p, (z_b, _, _) in boundary_data.items():
-        if p in node_idx and node_idx[p] >= len(nodes):
-            idx = node_idx[p]
+    for idx, (x, y) in enumerate(nodes):
+        # Sprawdzenie, czy punkt jest na brzegu
+        r2 = x**2 + y**2
+        if abs(r2 - 1.0) < tol:
+            # Punkt brzegowy: warunek Dirichleta
             A[idx, idx] = 1.0
-            b[idx] = z_b
-    
-    # 3. Sprawdzenie zer na przekątnej macierzy A
-    diag = np.diag(A)
-    zero_diag_indices = np.where(np.abs(diag) < 1e-12)[0]
-    if len(zero_diag_indices) > 0:
-        print("UWAGA: Zerowe elementy na przekątnej macierzy A!")
-        for idx in zero_diag_indices:
-            print(f"Indeks: {idx}, punkt: {all_points[idx]}, A[{idx},{idx}] = {A[idx, idx]}")
-        
-    return A, b, all_points
+            b[idx] = boundary_func(x, y)
+        else:
+            # Punkt wewnętrzny: klasyczny Laplasjan
+            A[idx, idx] = -4.0 / h**2
+            # Sąsiedzi: (x+h, y), (x-h, y), (x, y+h), (x, y-h)
+            for dx, dy in [(h, 0), (-h, 0), (0, h), (0, -h)]:
+                neighbor = (round(x + dx, precision), round(y + dy, precision))
+                if neighbor in node_idx:
+                    j = node_idx[neighbor]
+                    A[idx, j] = 1.0 / h**2
+                else:
+                    # Sąsiad poza kołem
+                    xb, yb = x + dx, y + dy
+                    scale = 1.0 / math.sqrt(xb**2 + yb**2) # Rzutuj na brzeg koła
+                    xb, yb = xb * scale, yb * scale
+                    zb = boundary_func(xb, yb)
+                    h_prim = math.sqrt((xb - x)**2 + (yb - y)**2) # Przybliżenie asymetryczne
+                    A[idx, idx] -= 1.0 / (h * h_prim)
+                    b[idx] -= zb / (h * h_prim)
+                    neighbor2 = (round(x - dx, precision), round(y - dy, precision))
+                    if neighbor2 in node_idx:
+                        j2 = node_idx[neighbor2]
+                        A[idx, j2] += 1.0 / h**2
+
+    return A, b, nodes
 
 def gauss_elimination(A, b):
     """
@@ -116,7 +72,6 @@ def gauss_elimination(A, b):
     A = A.copy()
     b = b.copy()
     n = len(b)
-    print("Symetryczność macierzy:", np.allclose(A, A.T))
     for i in range(n):
         # Wybór elementu głównego
         max_row = np.argmax(np.abs(A[i:, i])) + i
@@ -126,7 +81,6 @@ def gauss_elimination(A, b):
             A[[i, max_row]] = A[[max_row, i]]
             b[i], b[max_row] = b[max_row], b[i]
         pivot = A[i, i]
-        print(f"Pivot {i}: {pivot:.4e}")
         A[i] = A[i] / pivot
         b[i] = b[i] / pivot
         for j in range(i+1, n):
@@ -165,7 +119,7 @@ def get_section(nodes, values, axis='x'):
     Zwraca punkty na przekroju x=0 lub y=0 oraz odpowiadające im wartości.
     Wybiera punkty najbliższe osi i usuwa duplikaty, zapewniając rosnącą sekwencję.
     """
-    tol = 1e-2  # większa tolerancja
+    tol = 1e-8
     section_pts = []
     section_vals = []
     if axis == 'x':
@@ -211,6 +165,7 @@ def solve_laplace(N, method='gauss', verbose=False):
         raise ValueError("method musi być 'gauss' albo 'seidel'")
     xs, ux = get_section(nodes, u, axis='x')
     ys, uy = get_section(nodes, u, axis='y')
+    
     spline_x = CubicSpline(xs, ux) # splajn 3 stopnia dla przekroju x=0
     spline_y = CubicSpline(ys, uy) # splajn 3 stopnia dla przekroju y=0
     return nodes, u, spline_x, spline_y, xs, ux, ys, uy
@@ -246,8 +201,8 @@ def solve_splines(xs, ux, ys, uy, method='gauss', verbose=False):
     A_x, alpha_x = cubic_spline_system(xs, ux) # macierze dla przekrojów
     A_y, alpha_y = cubic_spline_system(ys, uy) # macierze dla przekrojów
     if method == 'gauss':
-        c_x = gauss_elimination(A_x, alpha_x)
-        c_y = gauss_elimination(A_y, alpha_y)
+        c_x = np.linalg.solve(A_x, alpha_x) # rozwiązanie układu metodą Gaussa
+        c_y = np.linalg.solve(A_y, alpha_y) # rozwiązanie układu metodą Gaussa
         if verbose:
             print("Splajny przekrojów: układ rozwiązany metodą Gaussa")
     elif method == 'seidel':
@@ -319,7 +274,7 @@ def plot_error(nodes, u, analytical_func, filename=None):
     if filename:
         plt.savefig(filename, bbox_inches='tight')
 
-def convergence_study(N_values, boundary_func, analytical_func, method='gauss', filename=None):
+def convergence_study(N_values, analytical_func, method='gauss', filename=None):
     """
     Bada zbieżność metody (zmienia N i bada błąd dla coraz gęstszych siatek).
     Zapisuje wykres do pliku, jeśli filename jest podane.
@@ -344,10 +299,10 @@ def convergence_study(N_values, boundary_func, analytical_func, method='gauss', 
         plt.savefig(filename, bbox_inches='tight')
 
 def plot_circle_grid(N, filename="siatka.png"):
-    points, _ = grid_circle(N)
+    points = grid_circle(N)
     x_vals, y_vals = zip(*points)
 
-    fig, ax = plt.subplots(figsize=(6, 6))
+    _, ax = plt.subplots(figsize=(6, 6))
     ax.scatter(x_vals, y_vals, color='blue', s=10)
     circle = plt.Circle((0, 0), 1.0, color='red', fill=False, linewidth=2, linestyle='--')
     ax.add_patch(circle)
@@ -361,20 +316,20 @@ def plot_circle_grid(N, filename="siatka.png"):
     plt.close()
 
 
-def compare_methods(N, boundary_func, analytical_func, verbose=False):
+def compare_methods(N, analytical_func, verbose=False):
     """
     Porównuje metody Gaussa i Gaussa-Seidela dla danego N.
     Zwraca błędy i czasy wykonania oraz rysuje wykresy przekrojów.
     """
     # Metoda Gaussa
     start_gauss = time.time()
-    nodes_g, u_g, spline_x_g, spline_y_g, xs_g, ux_g, ys_g, uy_g = solve_laplace(N, method='gauss', verbose=verbose)
+    nodes_g, u_g, spline_x_g, _, xs_g, ux_g, _, _ = solve_laplace(N, method='gauss', verbose=verbose)
     time_gauss = time.time() - start_gauss
     err_g_max, err_g_mse = test_accuracy(nodes_g, u_g, analytical_func)
 
     # Metoda Gaussa-Seidela
     start_seidel = time.time()
-    nodes_s, u_s, spline_x_s, spline_y_s, xs_s, ux_s, ys_s, uy_s = solve_laplace(N, method='seidel', verbose=verbose)
+    nodes_s, u_s, spline_x_s, _, _, _, _, _ = solve_laplace(N, method='seidel', verbose=verbose)
     time_seidel = time.time() - start_seidel
     err_s_max, err_s_mse = test_accuracy(nodes_s, u_s, analytical_func)
 
@@ -495,6 +450,18 @@ if __name__ == "__main__":
     # Wybierz funkcję brzegową i analityczną do testu
     boundary_func = f1
     analytical_func = f1
+    
+    # --- Zbudowanie układu równań Laplace'a ---
+    # print("Budowanie układu równań Laplace'a...")
+    # A, b, all_points = build_system(N, boundary_func)
+    # diag = np.diag(A)
+    # print(diag)
+    # zero_diag_indices = np.where(np.abs(diag) < 1e-12)[0]
+    # if len(zero_diag_indices) > 0:
+    #     print("UWAGA: Zerowe elementy na przekątnej macierzy A!")
+    #     for idx in zero_diag_indices:
+    #         print(f"Indeks: {idx}, punkt: {all_points[idx]}, A[{idx},{idx}] = {A[idx, idx]}")
+            
     # --- DODATKOWO: generowanie plików .txt dla funkcji f2 ---
     # print("Generowanie plików .txt dla funkcji f2 (Gauss i Seidel)...")
     # nodes_f2, u_f2, *_ = solve_laplace(N, f2, method='gauss', verbose=False)
@@ -541,19 +508,19 @@ if __name__ == "__main__":
     print(f"Błąd maksymalny: {max_err:.2e}, MSE: {mse:.2e}")
 
     print("Badanie zbieżności metody dla kilku siatek (może potrwać)...")
-    convergence_study([8, 12, 16, 20], boundary_func, analytical_func, method='gauss', filename="wykres_zbieznosc.png")
+    convergence_study([8, 12, 16, 20], analytical_func, method='gauss', filename="wykres_zbieznosc.png")
     
     plot_circle_grid(N)
 
     # --- Porównanie metod --- #
     print("\nPorównanie metod eliminacji Gaussa i Gaussa-Seidela:")
-    results = compare_methods(N=15, boundary_func=boundary_func, analytical_func=analytical_func, verbose=True)
+    results = compare_methods(N=15, analytical_func=analytical_func, verbose=True)
 
     # --- Porównanie metod: czas vs N i błąd vs N ---
-    # N_values = [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]
-    # benchmark_methods(N_values, analytical_func,
-    #                   filename_time="porownanie_czas.png",
-    #                   filename_error="porownanie_blad.png")
+    N_values = [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]
+    benchmark_methods(N_values, analytical_func,
+                      filename_time="porownanie_czas.png",
+                      filename_error="porownanie_blad.png")
 
     # --- Porównanie różnicy rozwiązania ---
     print("Rysowanie różnicy rozwiązań Gauss vs Seidel...")
