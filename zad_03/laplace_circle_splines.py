@@ -461,17 +461,6 @@ if __name__ == "__main__":
     #     print("UWAGA: Zerowe elementy na przekątnej macierzy A!")
     #     for idx in zero_diag_indices:
     #         print(f"Indeks: {idx}, punkt: {all_points[idx]}, A[{idx},{idx}] = {A[idx, idx]}")
-            
-    # --- DODATKOWO: generowanie plików .txt dla funkcji f2 ---
-    # print("Generowanie plików .txt dla funkcji f2 (Gauss i Seidel)...")
-    # nodes_f2, u_f2, *_ = solve_laplace(N, f2, method='gauss', verbose=False)
-    # with open("exp_sin_generated_gauss.txt", "w") as f:
-    #     for (x, y), val in zip(nodes_f2, u_f2):
-    #         f.write(f"{x:.8f}\t{y:.8f}\t{val:.8f}\n")
-    # nodes_f2s, u_f2s, *_ = solve_laplace(N, f2, method='seidel', verbose=False)
-    # with open("exp_sin_generated_seidel.txt", "w") as f:
-    #     for (x, y), val in zip(nodes_f2s, u_f2s):
-    #         f.write(f"{x:.8f}\t{y:.8f}\t{val:.8f}\n")
 
     # --- Z1-Z3: rozwiązanie metodą Gaussa ---
     print("Rozwiązanie układu metodą Gaussa dla Laplace'a...")
