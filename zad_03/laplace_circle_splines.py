@@ -527,13 +527,14 @@ if __name__ == "__main__":
 
     print("Rysowanie rozkładu błędu...")
     plot_error(nodes, u, analytical_func, filename="wykres_blad_numeryczny.png")
+    plot_error(nodes_s, u_s, analytical_func, filename="wykres_blad_numeryczny_seidela.png")
 
     print("Test dokładności rozwiązania:")
     max_err, mse = test_accuracy(nodes, u, analytical_func)
     print(f"Błąd maksymalny: {max_err:.2e}, MSE: {mse:.2e}")
 
     print("Badanie zbieżności metody dla kilku siatek (może potrwać)...")
-    convergence_study([8, 12, 16, 20], analytical_func, method='gauss', filename="wykres_zbieznosc.png")
+    convergence_study([8, 12, 16, 20, 24, 28, 32, 36, 40], analytical_func, method='gauss', filename="wykres_zbieznosc.png")
     
     plot_circle_grid(N)
     
@@ -544,7 +545,7 @@ if __name__ == "__main__":
     results = compare_methods(N=15, analytical_func=analytical_func, verbose=True)
 
     # --- Porównanie metod: czas vs N i błąd vs N ---
-    N_values = [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]
+    N_values = [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80]
     benchmark_methods(N_values, analytical_func,
                       filename_time="porownanie_czas.png",
                       filename_error="porownanie_blad.png")
