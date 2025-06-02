@@ -67,7 +67,7 @@ def build_system(N, boundary_func=lambda x, y: x**2 - y**2):
                 else:
                     # Sąsiad poza kołem
                     xb, yb = x + dx, y + dy
-                    scale = 1.0 / math.sqrt(xb**2 + yb**2) # Rzutuj na brzeg koła
+                    scale = 1.0 / math.sqrt(xb**2 + yb**2) # Rzutuowanie na brzeg koła
                     xb, yb = xb * scale, yb * scale
                     h_prim = math.sqrt((xb - x)**2 + (yb - y)**2)
                     zb = boundary_func(xb, yb)
@@ -77,7 +77,7 @@ def build_system(N, boundary_func=lambda x, y: x**2 - y**2):
                     neighbor2_idx = is_close_point(neighbor2, node_idx, tol)
                     if neighbor2_idx is not None:
                         j2 = neighbor2_idx
-                        A[idx, j2] += 1.0 / h**2
+                        A[idx, j2] += 1.0 / h**2 # wpływ drugiego sąsiada
 
     return A, b, nodes
 
@@ -203,7 +203,7 @@ def solve_splines(xs, ux, ys, uy, method='gauss', verbose=False):
         alpha = np.zeros(n)
         # Obliczenie wektora alpha (pochodnych drugiego rzędu) w punktach wewnętrznych
         for i in range(1, n-1): 
-            alpha[i] = (3/h[i]) * (y[i+1]-y[i]) - (3/h[i-1]) * (y[i]-y[i-1])
+            alpha[i] = (3/h[i]) * (y[i+1]-y[i]) - (3/h[i-1]) * (y[i]-y[i-1]) # wzór na pochodną drugiego rzędu
         A = np.zeros((n, n))
         for i in range(1, n-1): # budowa macierzy trójdiagonalnej
             A[i, i-1] = h[i-1]
@@ -214,8 +214,8 @@ def solve_splines(xs, ux, ys, uy, method='gauss', verbose=False):
         A[-1,-1] = 1.0
         return A, alpha
 
-    A_x, alpha_x = cubic_spline_system(xs, ux) # macierze dla przekrojów
-    A_y, alpha_y = cubic_spline_system(ys, uy) # macierze dla przekrojów
+    A_x, alpha_x = cubic_spline_system(xs, ux)
+    A_y, alpha_y = cubic_spline_system(ys, uy)
     if method == 'gauss':
         c_x = np.linalg.solve(A_x, alpha_x) # rozwiązanie układu metodą Gaussa
         c_y = np.linalg.solve(A_y, alpha_y) # rozwiązanie układu metodą Gaussa
@@ -545,10 +545,10 @@ if __name__ == "__main__":
     results = compare_methods(N=15, analytical_func=analytical_func, verbose=True)
 
     # --- Porównanie metod: czas vs N i błąd vs N ---
-    N_values = [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80]
-    benchmark_methods(N_values, analytical_func,
-                      filename_time="porownanie_czas.png",
-                      filename_error="porownanie_blad.png")
+    # N_values = [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80]
+    # benchmark_methods(N_values, analytical_func,
+    #                   filename_time="porownanie_czas.png",
+    #                   filename_error="porownanie_blad.png")
 
     # --- Porównanie różnicy rozwiązania ---
     print("Rysowanie różnicy rozwiązań Gauss vs Seidel...")
