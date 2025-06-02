@@ -17,12 +17,26 @@ def grid_circle(N):
             y = round(j * h, precision)
             y2 = round(-j * h, precision)
             for xx, yy in [(x, y), (x2, y), (x, y2), (x2, y2)]:
+                neighbour = (round(xx, precision), round(yy, precision))
                 r2 = xx**2 + yy**2
                 if r2 < 1.0 - tol:
-                    nodes.add((xx, yy))
-
+                    nodes.add(neighbour)
+               
     return sorted(nodes)
 
+def is_close_point(point, node_idx, tol=1e-8):
+    """
+    Sprawdza, czy punkt znajduje się w node_idx z uwzględnieniem tolerancji.
+    
+    :param point: Punkt do sprawdzenia (x, y).
+    :param node_idx: Słownik punktów (x, y) -> indeks.
+    :param tol: Tolerancja dla porównania współrzędnych.
+    :return: Indeks punktu w node_idx, jeśli znaleziono, w przeciwnym razie None.
+    """
+    for key, idx in node_idx.items():
+        if math.isclose(point[0], key[0], abs_tol=tol) and math.isclose(point[1], key[1], abs_tol=tol):
+            return idx
+    return None
 
 def build_system(N, boundary_func=lambda x, y: x**2 - y**2):
     h = 2.0 / N
@@ -46,53 +60,55 @@ def build_system(N, boundary_func=lambda x, y: x**2 - y**2):
             # Sąsiedzi: (x+h, y), (x-h, y), (x, y+h), (x, y-h)
             for dx, dy in [(h, 0), (-h, 0), (0, h), (0, -h)]:
                 neighbor = (round(x + dx, precision), round(y + dy, precision))
-                if neighbor in node_idx:
-                    j = node_idx[neighbor]
+                neighbor_idx = is_close_point(neighbor, node_idx, tol)
+                if neighbor_idx is not None:
+                    j = neighbor_idx
                     A[idx, j] = 1.0 / h**2
                 else:
                     # Sąsiad poza kołem
                     xb, yb = x + dx, y + dy
                     scale = 1.0 / math.sqrt(xb**2 + yb**2) # Rzutuj na brzeg koła
                     xb, yb = xb * scale, yb * scale
+                    h_prim = math.sqrt((xb - x)**2 + (yb - y)**2)
                     zb = boundary_func(xb, yb)
-                    h_prim = math.sqrt((xb - x)**2 + (yb - y)**2) # Przybliżenie asymetryczne
                     A[idx, idx] -= 1.0 / (h * h_prim)
                     b[idx] -= zb / (h * h_prim)
                     neighbor2 = (round(x - dx, precision), round(y - dy, precision))
-                    if neighbor2 in node_idx:
-                        j2 = node_idx[neighbor2]
+                    neighbor2_idx = is_close_point(neighbor2, node_idx, tol)
+                    if neighbor2_idx is not None:
+                        j2 = neighbor2_idx
                         A[idx, j2] += 1.0 / h**2
 
     return A, b, nodes
 
-def gauss_elimination(A, b):
-    """
-    Prosty algorytm eliminacji Gaussa Z WYBOREM ELEMENTU GŁÓWNEGO.
-    """
-    A = A.copy()
-    b = b.copy()
-    n = len(b)
-    for i in range(n):
-        # Wybór elementu głównego
-        max_row = np.argmax(np.abs(A[i:, i])) + i
-        if abs(A[max_row, i]) < 1e-8:
-            raise ValueError("Pivot zero!")
-        if max_row != i:
-            A[[i, max_row]] = A[[max_row, i]]
-            b[i], b[max_row] = b[max_row], b[i]
-        pivot = A[i, i]
-        A[i] = A[i] / pivot
-        b[i] = b[i] / pivot
-        for j in range(i+1, n):
-            factor = A[j, i]
-            A[j] = A[j] - factor * A[i]
-            b[j] = b[j] - factor * b[i]
-    x = np.zeros(n)
-    for i in reversed(range(n)):
-        x[i] = b[i] - np.dot(A[i, i+1:], x[i+1:])
-    return x
+# def gauss_elimination(A, b):
+#     """
+#     Prosty algorytm eliminacji Gaussa Z WYBOREM ELEMENTU GŁÓWNEGO.
+#     """
+#     A = A.copy()
+#     b = b.copy()
+#     n = len(b)
+#     for i in range(n):
+#         # Wybór elementu głównego
+#         max_row = np.argmax(np.abs(A[i:, i])) + i
+#         if abs(A[max_row, i]) < 1e-8:
+#             raise ValueError("Pivot zero!")
+#         if max_row != i:
+#             A[[i, max_row]] = A[[max_row, i]]
+#             b[i], b[max_row] = b[max_row], b[i]
+#         pivot = A[i, i]
+#         A[i] = A[i] / pivot
+#         b[i] = b[i] / pivot
+#         for j in range(i+1, n):
+#             factor = A[j, i]
+#             A[j] = A[j] - factor * A[i]
+#             b[j] = b[j] - factor * b[i]
+#     x = np.zeros(n)
+#     for i in reversed(range(n)):
+#         x[i] = b[i] - np.dot(A[i, i+1:], x[i+1:])
+#     return x
 
-def gauss_seidel(A, b, x0=None, tol=1e-9, maxiter=20000, verbose=False):
+def gauss_seidel(A, b, x0=None, tol=1e-8, maxiter=20000, verbose=False):
     """
     Metoda Gaussa-Seidela dla układów równań liniowych.
     Z4: Rozwiązanie układu metodą iteracyjną Gaussa-Seidela.
@@ -158,7 +174,7 @@ def solve_laplace(N, method='gauss', verbose=False):
         if verbose:
             print("Rozwiązano układ metodą Gaussa")
     elif method == 'seidel':
-        u = gauss_seidel(A, b, tol=1e-9, maxiter=30000, verbose=verbose) # rozwiązanie układu metodą Gaussa-Seidela
+        u = gauss_seidel(A, b, tol=1e-8, maxiter=30000, verbose=verbose) # rozwiązanie układu metodą Gaussa-Seidela
         if verbose:
             print("Rozwiązano układ metodą Gaussa-Seidela")
     else:
@@ -206,8 +222,8 @@ def solve_splines(xs, ux, ys, uy, method='gauss', verbose=False):
         if verbose:
             print("Splajny przekrojów: układ rozwiązany metodą Gaussa")
     elif method == 'seidel':
-        c_x = gauss_seidel(A_x, alpha_x, tol=1e-9, maxiter=10000, verbose=verbose)
-        c_y = gauss_seidel(A_y, alpha_y, tol=1e-9, maxiter=10000, verbose=verbose)
+        c_x = gauss_seidel(A_x, alpha_x, tol=1e-8, maxiter=10000, verbose=verbose)
+        c_y = gauss_seidel(A_y, alpha_y, tol=1e-8, maxiter=10000, verbose=verbose)
         if verbose:
             print("Splajny przekrojów: układ rozwiązany metodą Gaussa-Seidela")
     else:
@@ -443,6 +459,25 @@ def f1(x, y):
 def f2(x, y):
     return np.exp(x) * np.sin(y)
 
+def compare_with_function(file_path):
+    """
+    Porównuje wartości z trzeciej kolumny pliku z wartością funkcji x^2 - y^2.
+    Wyświetla różnicę dla każdego wiersza.
+    
+    :param file_path: Ścieżka do pliku z danymi (x, y, wartość).
+    """
+    with open(file_path, "r") as f:
+        lines = f.readlines()
+    
+    print(f"{'x':>10} {'y':>10} {'z (plik)':>15} {'z (x^2-y^2)':>15} {'różnica':>15}")
+    print("-" * 65)
+    
+    for line in lines:
+        x, y, z = map(float, line.split())
+        z_func = x**2 - y**2
+        diff = z - z_func
+        print(f"{x:10.8f} {y:10.8f} {z:15.8f} {z_func:15.8f} {diff:15.8f}")
+
 ############## --- BLOK GŁÓWNY: TESTY, WALIDACJA, WYKRESY --- ##############
 
 if __name__ == "__main__":
@@ -450,6 +485,7 @@ if __name__ == "__main__":
     # Wybierz funkcję brzegową i analityczną do testu
     boundary_func = f1
     analytical_func = f1
+    build_system(N)  # Wyświetlenie siatki punktów w kole
     
     # --- Zbudowanie układu równań Laplace'a ---
     # print("Budowanie układu równań Laplace'a...")
@@ -500,6 +536,8 @@ if __name__ == "__main__":
     convergence_study([8, 12, 16, 20], analytical_func, method='gauss', filename="wykres_zbieznosc.png")
     
     plot_circle_grid(N)
+    
+    compare_with_function("xx_minus_yy_generated_gauss.txt")
 
     # --- Porównanie metod --- #
     print("\nPorównanie metod eliminacji Gaussa i Gaussa-Seidela:")
